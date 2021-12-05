@@ -76,18 +76,21 @@ public:
 
 	// define you need pipeline
 	std::vector<VkPipeline> _trianglePipelines;
-	//VkPipeline _trianglePipeline;
-	//VkPipeline _redTrianglePipeline;
 
 	DeletionQueue _mainDeletionQueue;
 
+	std::vector<uint16_t> shader_index{ 0,1,2,3,4,3};
+	std::vector<uint16_t> mesh_index_shader{4};
 	std::vector<std::string> shader_name{
 		{"triangle.vert.spv"},
 		{"triangle.frag.spv"},
 		{"colored_triangle.vert.spv"},
-		{"colored_triangle.frag.spv"}
+		{"colored_triangle.frag.spv"},
+		{"tri_mesh.vert.spv"}
 	};
 
+	VmaAllocator _allocator;
+	Mesh _triangleMesh;
 	//initializes everything in the engine
 	void init();
 
@@ -109,4 +112,8 @@ private:
 	bool load_shader_module(const char* filePath, VkShaderModule* outShaderModule);
 	void init_pipelines();
 	bool shader_perpare(PipelineBuilder* pipelineBuilder);
+
+	// Mesh Part
+	void load_mesh();
+	void upload_mesh(Mesh& mesh);
 };
