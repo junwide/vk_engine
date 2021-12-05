@@ -9,7 +9,8 @@
 #include <VkBootstrap.h>
 #include <iostream>
 #include <fstream>
-
+#define VMA_IMPLEMENTATION
+#include "vk_mem_alloc.h"
 using namespace std;
 #define VK_CHECK(x)												\
 	do															\
@@ -49,7 +50,13 @@ void VulkanEngine::init_vulkan()
 	_choseGPU = vkb_physicalDevice.physical_device;
 
 	_graphicsQueue = vkb_device.get_queue(vkb::QueueType::graphics).value();
-	_graphicsQueueFamily = vkb_device.get_queue_index(vkb::QueueType::graphics).value(); 
+	_graphicsQueueFamily = vkb_device.get_queue_index(vkb::QueueType::graphics).value();
+
+	VmaAllocatorCreateInfo allocator_info = {};
+	allocator_info.instance = _instances;
+	allocator_info.device = _device;
+	allocator_info.physicalDevice = _choseGPU;
+	vmaCreateAllocator(&allocator_info, &_allocator);
 }
 
 void VulkanEngine::init_swapchain()
@@ -206,14 +213,32 @@ bool VulkanEngine::load_shader_module(const char* filePath, VkShaderModule* outS
 bool VulkanEngine::shader_perpare(PipelineBuilder* pipelineBuilder)
 {
 	
-	uint8_t shader_count = static_cast<uint8_t> (shader_name.size());
+	uint8_t shader_count = static_cast<uint8_t> (shader_index.size());
+	uint8_t mesh_shader_count = static_cast<uint8_t> (mesh_index_shader.size());
 	vector< VkShaderModule> targetShader(shader_count);
-	for (uint16_t i = 0; i < shader_count; i++)
+	VertexInputDescription vertexDescription = Vertex::get_vertex_description();
+	for (uint16_t i = 0, j = 0; i < shader_count; i++)
 	{
 		int flag_build = i % 2;
 		string pathfile = "../../shaders/";
-		pathfile = pathfile + shader_name[i];
+		pathfile = pathfile + shader_name[shader_index[i]];
 		
+		if ( i == mesh_index_shader[j])
+		{
+			
+			pipelineBuilder->_vertexInputInfo.pVertexAttributeDescriptions = vertexDescription.attributes.data();
+			pipelineBuilder->_vertexInputInfo.vertexAttributeDescriptionCount = vertexDescription.attributes.size();
+
+			pipelineBuilder->_vertexInputInfo.pVertexBindingDescriptions = vertexDescription.bindings.data();
+			pipelineBuilder->_vertexInputInfo.vertexBindingDescriptionCount = vertexDescription.bindings.size();
+			if (j + 1 == mesh_shader_count){
+				j = 0;
+			}
+			else{
+				j++;
+			}
+		}
+
 		if (!load_shader_module(pathfile.c_str(), &targetShader[i]))
 		{
 			cout << "Error when building the shader module" << endl;
@@ -325,6 +350,53 @@ VkPipeline PipelineBuilder::build_pipline(VkDevice device, VkRenderPass renderpa
 
 }
 
+void VulkanEngine::upload_mesh(Mesh& mesh)
+{
+	VkBufferCreateInfo buffer_info = {};
+	buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	buffer_info.size = mesh._vertices.size() * sizeof(Vertex);
+	buffer_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+
+	// allocation not allocator
+	VmaAllocationCreateInfo vmaalloc_info = {};
+	vmaalloc_info.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+	
+	VK_CHECK(vmaCreateBuffer(_allocator,
+		&buffer_info,
+		&vmaalloc_info,
+		&mesh._vertexBuffer._buffer,
+		&mesh._vertexBuffer._allocation,
+		nullptr));
+
+	_mainDeletionQueue.push_function([=]() {
+		vmaDestroyBuffer(_allocator, mesh._vertexBuffer._buffer, mesh._vertexBuffer._allocation);
+		});
+	
+	void* data;
+	vmaMapMemory(_allocator, mesh._vertexBuffer._allocation, &data);
+	memcpy(data, mesh._vertices.data(), mesh._vertices.size() * sizeof(Vertex));
+	vmaUnmapMemory(_allocator, mesh._vertexBuffer._allocation);
+}
+
+void VulkanEngine::load_mesh()
+{
+	//make the array 3 vertices long
+	_triangleMesh._vertices.resize(3);
+
+	//vertex positions
+	_triangleMesh._vertices[0].position = { 1.f, 1.f, 0.0f };
+	_triangleMesh._vertices[1].position = { -1.f, 1.f, 0.0f };
+	_triangleMesh._vertices[2].position = { 0.f,-1.f, 0.0f };
+
+	//vertex colors, all green
+	_triangleMesh._vertices[0].color = { 0.f, 1.f, 0.0f }; //pure green
+	_triangleMesh._vertices[1].color = { 0.f, 1.f, 0.0f }; //pure green
+	_triangleMesh._vertices[2].color = { 0.f, 1.f, 0.0f }; //pure green
+
+	//we don't care about the vertex normals
+	upload_mesh(_triangleMesh);
+}
+
 void VulkanEngine::init()
 {
 	// We initialize SDL and create a window with it. 
@@ -355,6 +427,8 @@ void VulkanEngine::init()
 
 	init_pipelines();
 	//everything went fine
+	load_mesh();
+
 	_isInitialized = true;
 }
 void VulkanEngine::cleanup()
@@ -413,7 +487,15 @@ void VulkanEngine::draw()
 	
 	// the place
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipelines[_selectedShader]);
-	vkCmdDraw(cmd, 3, 1, 0, 0);
+	if (_selectedShader == 2)
+	{
+		VkDeviceSize offset = 0;
+		vkCmdBindVertexBuffers(cmd, 0, 1, &_triangleMesh._vertexBuffer._buffer, &offset);
+		vkCmdDraw(cmd, _triangleMesh._vertices.size(), 1, 0, 0);
+	}
+	else{
+		vkCmdDraw(cmd, 3, 1, 0, 0);
+	}
 	//
 
 	vkCmdEndRenderPass(cmd);
@@ -478,7 +560,7 @@ void VulkanEngine::run()
 				if (e.key.keysym.sym == SDLK_SPACE)
 				{
 					_selectedShader += 1;
-					if (_selectedShader > 1)
+					if (_selectedShader > 2)
 					{
 						_selectedShader = 0;
 					}

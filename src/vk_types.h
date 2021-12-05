@@ -2,7 +2,9 @@
 // or project specific include files.
 
 #pragma once
-
 #include <vulkan/vulkan.h>
+#include "vk_mem_alloc.h"
+#include <vk_mesh.h>
+
 
 //we will add our main reusable types here
