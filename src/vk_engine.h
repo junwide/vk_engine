@@ -8,6 +8,8 @@
 #include <string>
 #include <functional>
 #include <deque>
+#include <glm/glm.hpp>
+
 class PipelineBuilder {
 public:
 	std::vector<VkPipelineShaderStageCreateInfo> _shaderStages;
@@ -37,6 +39,11 @@ struct DeletionQueue
 		}
 		deletors.clear();
 	}
+};
+
+struct MeshPushConstants {
+	glm::vec4 data;
+	glm::mat4 render_matrix;
 };
 
 class VulkanEngine {
@@ -73,14 +80,15 @@ public:
 	VkFence _renderFence;
 
 	VkPipelineLayout _trianglePipelineLayout;
+	VkPipelineLayout _meshPipelineLayout;
 
 	// define you need pipeline
 	std::vector<VkPipeline> _trianglePipelines;
 
 	DeletionQueue _mainDeletionQueue;
 
-	std::vector<uint16_t> shader_index{ 0,1,2,3,4,3};
-	std::vector<uint16_t> mesh_index_shader{4};
+	std::vector<uint16_t> shader_index{ 0,1,2,3,4,3,4,3};
+	std::vector<uint16_t> mesh_index_shader{4,6};
 	std::vector<std::string> shader_name{
 		{"triangle.vert.spv"},
 		{"triangle.frag.spv"},
@@ -91,6 +99,7 @@ public:
 
 	VmaAllocator _allocator;
 	Mesh _triangleMesh;
+	Mesh _monkeyMesh;
 	//initializes everything in the engine
 	void init();
 
@@ -116,4 +125,5 @@ private:
 	// Mesh Part
 	void load_mesh();
 	void upload_mesh(Mesh& mesh);
+	glm::mat4 UpdateDate();
 };

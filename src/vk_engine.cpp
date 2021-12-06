@@ -9,6 +9,7 @@
 #include <VkBootstrap.h>
 #include <iostream>
 #include <fstream>
+#include <glm/gtx/transform.hpp>
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
 using namespace std;
@@ -57,6 +58,9 @@ void VulkanEngine::init_vulkan()
 	allocator_info.device = _device;
 	allocator_info.physicalDevice = _choseGPU;
 	vmaCreateAllocator(&allocator_info, &_allocator);
+	_mainDeletionQueue.push_function([=]() {
+		vmaDestroyAllocator(_allocator);
+		});
 }
 
 void VulkanEngine::init_swapchain()
@@ -231,6 +235,8 @@ bool VulkanEngine::shader_perpare(PipelineBuilder* pipelineBuilder)
 
 			pipelineBuilder->_vertexInputInfo.pVertexBindingDescriptions = vertexDescription.bindings.data();
 			pipelineBuilder->_vertexInputInfo.vertexBindingDescriptionCount = vertexDescription.bindings.size();
+
+			pipelineBuilder->_pipelineLayout = _meshPipelineLayout;
 			if (j + 1 == mesh_shader_count){
 				j = 0;
 			}
@@ -268,6 +274,16 @@ bool VulkanEngine::shader_perpare(PipelineBuilder* pipelineBuilder)
 
 void VulkanEngine::init_pipelines()
 {
+	VkPipelineLayoutCreateInfo mesh_pipeline_layout_info = vkinit::pipeline_layout_create_info();
+	VkPushConstantRange push_constant;
+	push_constant.offset = 0;
+	push_constant.size = sizeof(MeshPushConstants);
+	push_constant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	mesh_pipeline_layout_info.pushConstantRangeCount = 1;
+	mesh_pipeline_layout_info.pPushConstantRanges = &push_constant;
+	VK_CHECK(vkCreatePipelineLayout(_device, &mesh_pipeline_layout_info, nullptr, &_meshPipelineLayout));
+
+
 	VkPipelineLayoutCreateInfo pipeline_layout_info = vkinit::pipeline_layout_create_info();
 	VK_CHECK(vkCreatePipelineLayout(_device, &pipeline_layout_info, nullptr, &_trianglePipelineLayout));
 
@@ -294,6 +310,7 @@ void VulkanEngine::init_pipelines()
 	// load all shader module
 	shader_perpare(&pipelineBuilder);
 	_mainDeletionQueue.push_function([=]() {
+		vkDestroyPipelineLayout(_device, _meshPipelineLayout, nullptr);
 		vkDestroyPipelineLayout(_device, _trianglePipelineLayout, nullptr);
 		});
 
@@ -394,7 +411,26 @@ void VulkanEngine::load_mesh()
 	_triangleMesh._vertices[2].color = { 0.f, 1.f, 0.0f }; //pure green
 
 	//we don't care about the vertex normals
+	_monkeyMesh.load_from_obj("../../assets/monkey_smooth.obj");
 	upload_mesh(_triangleMesh);
+	upload_mesh(_monkeyMesh);
+}
+
+glm::mat4 VulkanEngine::UpdateDate()
+{
+	glm::vec3 camPos = { 0.f,0.f,-2.f };
+
+	glm::mat4 view = glm::translate(glm::mat4(1.f), camPos);
+	//camera projection
+	glm::mat4 projection = glm::perspective(glm::radians(70.f), 1700.f / 900.f, 0.1f, 200.0f);
+	projection[1][1] *= -1;
+	//model rotation
+	glm::mat4 model = glm::rotate(glm::mat4{ 1.0f }, glm::radians(_frameNumber * 0.4f), glm::vec3(0, 1, 0));
+
+	//calculate final mesh matrix
+	glm::mat4 mesh_matrix = projection * view * model;
+	
+	return mesh_matrix;
 }
 
 void VulkanEngine::init()
@@ -487,10 +523,28 @@ void VulkanEngine::draw()
 	
 	// the place
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipelines[_selectedShader]);
-	if (_selectedShader == 2)
+	if (_selectedShader == 3)
+	{
+		VkDeviceSize offset = 0;
+		vkCmdBindVertexBuffers(cmd, 0, 1, &_monkeyMesh._vertexBuffer._buffer, &offset);
+
+		MeshPushConstants constants;
+		constants.render_matrix = UpdateDate();
+		//upload the matrix to the GPU via push constants
+		vkCmdPushConstants(cmd, _meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &constants);
+		//we can now draw
+		vkCmdDraw(cmd, _monkeyMesh._vertices.size(), 1, 0, 0);
+	}
+	else if (_selectedShader == 2)
 	{
 		VkDeviceSize offset = 0;
 		vkCmdBindVertexBuffers(cmd, 0, 1, &_triangleMesh._vertexBuffer._buffer, &offset);
+
+		MeshPushConstants constants;
+		constants.render_matrix = UpdateDate();
+		//upload the matrix to the GPU via push constants
+		vkCmdPushConstants(cmd, _meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &constants);
+		//we can now draw
 		vkCmdDraw(cmd, _triangleMesh._vertices.size(), 1, 0, 0);
 	}
 	else{
@@ -560,7 +614,7 @@ void VulkanEngine::run()
 				if (e.key.keysym.sym == SDLK_SPACE)
 				{
 					_selectedShader += 1;
-					if (_selectedShader > 2)
+					if (_selectedShader > 3)
 					{
 						_selectedShader = 0;
 					}
