@@ -2,9 +2,9 @@
 
 namespace vkinit {
 	VkCommandPoolCreateInfo vkinit::command_pool_create_info
-		(uint32_t queueFamilyIndex, 
+	(uint32_t queueFamilyIndex,
 		VkCommandPoolCreateFlags flags
-		)
+	)
 	{
 		VkCommandPoolCreateInfo info = {};
 		info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -16,10 +16,10 @@ namespace vkinit {
 	}
 
 	VkCommandBufferAllocateInfo vkinit::command_buffer_allocate_info
-		(VkCommandPool pool, 
-		uint32_t count, 
+	(VkCommandPool pool,
+		uint32_t count,
 		VkCommandBufferLevel level
-		)
+	)
 	{
 		VkCommandBufferAllocateInfo info = {};
 		info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -73,13 +73,13 @@ namespace vkinit {
 		raster_info.pNext = nullptr;
 		raster_info.depthClampEnable = VK_FALSE;
 		raster_info.rasterizerDiscardEnable = VK_FALSE;
-		
+
 		raster_info.polygonMode = polygonMode;
 		raster_info.lineWidth = 1.0f
 			;
 		raster_info.cullMode = VK_CULL_MODE_NONE;
 		raster_info.frontFace = VK_FRONT_FACE_CLOCKWISE;
-		
+
 		raster_info.depthBiasEnable = VK_FALSE;
 		raster_info.depthBiasConstantFactor = 0.0f;
 		raster_info.depthBiasClamp = 0.0f;
@@ -103,10 +103,10 @@ namespace vkinit {
 	}
 	VkPipelineColorBlendAttachmentState vkinit::color_blend_attachment_state() {
 		VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
-		colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | 
-											VK_COLOR_COMPONENT_G_BIT |
-											VK_COLOR_COMPONENT_B_BIT | 
-											VK_COLOR_COMPONENT_A_BIT;
+		colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+			VK_COLOR_COMPONENT_G_BIT |
+			VK_COLOR_COMPONENT_B_BIT |
+			VK_COLOR_COMPONENT_A_BIT;
 		colorBlendAttachment.blendEnable = VK_FALSE;
 		return colorBlendAttachment;
 	}
@@ -123,6 +123,72 @@ namespace vkinit {
 		layout_info.pushConstantRangeCount = 0;
 		layout_info.pPushConstantRanges = nullptr;
 		return layout_info;
+	}
+
+	VkImageCreateInfo vkinit::image_create_info(
+		VkFormat format,
+		VkImageUsageFlags usageFlags,
+		VkExtent3D extent
+	) 
+	{
+		VkImageCreateInfo image_info = {};
+		image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		image_info.pNext = nullptr;
+
+		image_info.imageType = VK_IMAGE_TYPE_2D;
+		image_info.format = format;
+		image_info.extent = extent;
+
+		image_info.mipLevels = 1;
+		image_info.arrayLayers = 1;
+		image_info.samples = VK_SAMPLE_COUNT_1_BIT;
+		image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+		image_info.usage = usageFlags;
+
+		return image_info;
+	}
+
+	VkImageViewCreateInfo vkinit::imageview_create_info(
+		VkFormat format,
+		VkImage image,
+		VkImageAspectFlags aspectFlags
+	)
+	{
+		VkImageViewCreateInfo imageView_info = {};
+		imageView_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		imageView_info.pNext = nullptr;
+		
+		imageView_info.format = format;
+		imageView_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		imageView_info.image = image;
+		imageView_info.subresourceRange.layerCount = 1;
+		imageView_info.subresourceRange.levelCount = 1;
+		imageView_info.subresourceRange.baseMipLevel = 0;
+		imageView_info.subresourceRange.baseArrayLayer = 0;
+		imageView_info.subresourceRange.aspectMask = aspectFlags;
+
+		return imageView_info;
+	}
+
+	VkPipelineDepthStencilStateCreateInfo vkinit::depth_stencil_create_info(
+		bool bDepthTest,
+		bool bDepthWrite,
+		VkCompareOp compareOp
+	)
+	{
+		VkPipelineDepthStencilStateCreateInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+		info.pNext = nullptr;
+
+		info.depthTestEnable = bDepthTest ? VK_TRUE : VK_FALSE;
+		info.depthWriteEnable = bDepthWrite ? VK_TRUE : VK_FALSE;
+		info.depthCompareOp = bDepthTest ? compareOp : VK_COMPARE_OP_ALWAYS;
+		info.depthBoundsTestEnable = VK_FALSE;
+		info.minDepthBounds = 0.0f; // Optional
+		info.maxDepthBounds = 1.0f; // Optional
+		info.stencilTestEnable = VK_FALSE;
+
+		return info;
 	}
 }
 

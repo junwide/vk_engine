@@ -19,6 +19,7 @@ public:
 	VkRect2D _scissor;
 	VkPipelineRasterizationStateCreateInfo _rasterier;
 	VkPipelineColorBlendAttachmentState _colorBlendAttachment;
+	VkPipelineDepthStencilStateCreateInfo _depthStencil;
 	VkPipelineMultisampleStateCreateInfo _mulsampling;
 	VkPipelineLayout _pipelineLayout;
 
@@ -64,9 +65,14 @@ public:
 	VkDebugUtilsMessengerEXT _debug_Message;
 
 	VkSwapchainKHR _swapchain;
-	VkFormat _swapchainImageFormat;
+	
 	std::vector<VkImage> _swapchainImages;
 	std::vector<VkImageView> _swapchainImageViews;
+	VkFormat _swapchainImageFormat;
+
+	VkImageView _depthImageView;
+	AllocatedImage _depthImage;
+	VkFormat _depthFormat;
 
 	VkCommandPool _commandPool;
 	VkCommandBuffer _commandBuffer;
@@ -121,6 +127,7 @@ private:
 	bool load_shader_module(const char* filePath, VkShaderModule* outShaderModule);
 	void init_pipelines();
 	bool shader_perpare(PipelineBuilder* pipelineBuilder);
+	void init_depth_image();
 
 	// Mesh Part
 	void load_mesh();
