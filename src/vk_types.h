@@ -6,5 +6,8 @@
 #include "vk_mem_alloc.h"
 #include <vk_mesh.h>
 
-
+struct AllocatedImage {
+	VkImage _image;
+	VmaAllocation _allocation;
+};
 //we will add our main reusable types here
