@@ -31,6 +31,104 @@ namespace vkinit {
 		return info;
 	}
 
+	VkCommandBufferBeginInfo vkinit::command_buffer_begin_info(VkCommandBufferUsageFlags flags /*= 0*/)
+	{
+		VkCommandBufferBeginInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		info.pNext = nullptr;
+
+		info.pInheritanceInfo = nullptr;
+		info.flags = flags;
+		return info;
+	}
+
+	VkFramebufferCreateInfo vkinit::framebuffer_create_info(
+		VkRenderPass renderPass,
+		VkExtent2D extent,
+		uint32_t attachment_count
+		)
+	{
+		VkFramebufferCreateInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		info.pNext = nullptr;
+
+		info.renderPass = renderPass;
+		info.attachmentCount = attachment_count;
+		info.width = extent.width;
+		info.height = extent.height;
+		info.layers = 1;
+
+		return info;
+	}
+
+	VkFenceCreateInfo vkinit::fence_create_info(VkFenceCreateFlags flags /*= 0*/)
+	{
+		VkFenceCreateInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+		info.pNext = nullptr;
+
+		info.flags = flags;
+
+		return info;
+	}
+
+	VkSemaphoreCreateInfo vkinit::semaphore_create_info(VkSemaphoreCreateFlags flags /*= 0*/)
+	{
+		VkSemaphoreCreateInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+		info.pNext = nullptr;
+		info.flags = flags;
+		return info;
+	}
+
+	VkSubmitInfo vkinit::submit_info(
+		VkCommandBuffer* cmd,
+		VkPipelineStageFlags* waitFlag,
+		const VkSemaphore* waitSemphore,
+		uint32_t wait_count,
+		const VkSemaphore* signalSemphore,
+		uint32_t sgnal_count
+	)
+	{
+		VkSubmitInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		info.pNext = nullptr;
+
+		info.pWaitDstStageMask = waitFlag;
+
+		info.waitSemaphoreCount = wait_count;
+		info.pWaitSemaphores = waitSemphore;
+
+		info.signalSemaphoreCount = sgnal_count;
+		info.pSignalSemaphores = signalSemphore;
+
+		info.commandBufferCount = 1;
+		info.pCommandBuffers = cmd;
+
+		return info;
+	}
+
+	VkPresentInfoKHR vkinit::present_info(
+		const VkSwapchainKHR* swapchains,
+		uint32_t   swapchain_Count,
+		const VkSemaphore* waitSemaphores,
+		uint32_t   wait_count,
+		const uint32_t* pImageIndices
+	)
+	{
+		VkPresentInfoKHR info = {};
+		info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+		info.pNext = nullptr;
+
+		info.swapchainCount = swapchain_Count;
+		info.pSwapchains = swapchains;
+		info.pWaitSemaphores = waitSemaphores;
+		info.waitSemaphoreCount = wait_count;
+		info.pImageIndices = pImageIndices;
+
+		return info;
+	}
+
 	VkPipelineShaderStageCreateInfo  vkinit::pipeline_shader_stage_create_info(
 		VkShaderStageFlagBits stage,
 		VkShaderModule shaderModule
@@ -187,6 +285,31 @@ namespace vkinit {
 		info.minDepthBounds = 0.0f; // Optional
 		info.maxDepthBounds = 1.0f; // Optional
 		info.stencilTestEnable = VK_FALSE;
+
+		return info;
+	}
+
+	VkRenderPassBeginInfo vkinit::renderpass_begin_info(
+		VkRenderPass renderPass,
+		VkExtent2D windowExtent,
+		VkFramebuffer framebuffer,
+		const VkClearValue* clearvalue,
+		uint32_t value_count,
+		int32_t offset_x,
+		int32_t offset_y
+		)
+	{
+		VkRenderPassBeginInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		info.pNext = nullptr;
+
+		info.renderPass = renderPass;
+		info.renderArea.offset.x = offset_x;
+		info.renderArea.offset.y = offset_y;
+		info.renderArea.extent = windowExtent;
+		info.clearValueCount = value_count;
+		info.pClearValues = clearvalue;
+		info.framebuffer = framebuffer;
 
 		return info;
 	}

@@ -157,14 +157,9 @@ void VulkanEngine::init_default_renderpass()
 
 void VulkanEngine::init_framebuffers()
 {
-	VkFramebufferCreateInfo framebuffer_info = {};
-	framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-	framebuffer_info.pNext = nullptr;
-	framebuffer_info.renderPass = _renderPass;
-	framebuffer_info.attachmentCount = 2;
-	framebuffer_info.height = _windowExtent.height;
-	framebuffer_info.width = _windowExtent.width;
-	framebuffer_info.layers = 1;
+	VkFramebufferCreateInfo framebuffer_info = vkinit::framebuffer_create_info(
+												_renderPass,
+												_windowExtent);
 	
 	const uint32_t swapchain_count = static_cast<uint32_t>(_swapchainImages.size());
 	_framebuffers = vector<VkFramebuffer>(swapchain_count);
@@ -175,6 +170,7 @@ void VulkanEngine::init_framebuffers()
 		attachments[1] = _depthImageView;
 		framebuffer_info.pAttachments = attachments;
 		VK_CHECK(vkCreateFramebuffer(_device, &framebuffer_info, nullptr, &_framebuffers[i]));
+		
 		_mainDeletionQueue.push_function([=]() {
 			vkDestroyFramebuffer(_device, _framebuffers[i], nullptr);
 			vkDestroyImageView(_device, _swapchainImageViews[i], nullptr);
@@ -184,20 +180,18 @@ void VulkanEngine::init_framebuffers()
 
 void VulkanEngine::init_sync_struct()
 {
-	VkFenceCreateInfo fence_info = {};
-	fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-	fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-	fence_info.pNext = nullptr;
+	//create syncronization structures
+	//one fence to control when the gpu has finished rendering the frame,
+	//and 2 semaphores to syncronize rendering with swapchain
+	//we want the fence to start signalled so we can wait on it on the first frame
+	VkFenceCreateInfo fence_info = vkinit::fence_create_info(VK_FENCE_CREATE_SIGNALED_BIT);
 	VK_CHECK(vkCreateFence(_device, &fence_info, nullptr, &_renderFence));
 
 	_mainDeletionQueue.push_function([=]() {
 		vkDestroyFence(_device, _renderFence, nullptr);
 	});
 
-	VkSemaphoreCreateInfo sem_info = {};
-	sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-	sem_info.flags = 0;
-	sem_info.pNext = nullptr;
+	VkSemaphoreCreateInfo sem_info = vkinit::semaphore_create_info();
 	VK_CHECK(vkCreateSemaphore(_device, &sem_info, nullptr, &_presentSem));
 	VK_CHECK(vkCreateSemaphore(_device, &sem_info, nullptr, &_renderSem));
 
@@ -332,6 +326,7 @@ void VulkanEngine::init_pipelines()
 
 	// load all shader module
 	shader_perpare(&pipelineBuilder);
+	create_material(_trianglePipelines[3], _meshPipelineLayout, "defaultmesh");
 	_mainDeletionQueue.push_function([=]() {
 		vkDestroyPipelineLayout(_device, _meshPipelineLayout, nullptr);
 		vkDestroyPipelineLayout(_device, _trianglePipelineLayout, nullptr);
@@ -466,6 +461,9 @@ void VulkanEngine::load_mesh()
 	_monkeyMesh.load_from_obj("../../assets/monkey_smooth.obj");
 	upload_mesh(_triangleMesh);
 	upload_mesh(_monkeyMesh);
+
+	_meshSet["monkey"] = _monkeyMesh;
+	_meshSet["triangle"] = _triangleMesh;
 }
 
 glm::mat4 VulkanEngine::UpdateDate()
@@ -484,6 +482,97 @@ glm::mat4 VulkanEngine::UpdateDate()
 	
 	return mesh_matrix;
 }
+
+Material* VulkanEngine::create_material(VkPipeline pipeline, VkPipelineLayout layout, const string& name)
+{
+	Material mat;
+	mat.pipeline = pipeline;
+	mat.pipelineLayout = layout;
+	_material[name] = mat;
+	return &_material[name];
+}
+
+Material* VulkanEngine::get_material(const std::string& name)
+{
+	auto it = _material.find(name);
+	if (it == _material.end())
+	{
+		return nullptr;
+	}
+	else
+	{
+		return &(*it).second;
+	}
+}
+
+Mesh* VulkanEngine::getMesh(const std::string& name)
+{
+	auto it = _meshSet.find(name);
+	if (it == _meshSet.end())
+	{
+		return nullptr;
+	}
+	else
+	{
+		return &(*it).second;
+	}
+}
+void VulkanEngine::draw_object(VkCommandBuffer cmd, RenderObject* first, int count)
+{
+	glm::vec3 camPos = { 0.f ,-6.f, -10.f };
+	glm::mat4 view = glm::translate(glm::mat4(1.f), camPos);
+	glm::mat4 projection = glm::perspective(glm::radians(70.f), 1700.f / 900.f, 0.1f, 200.0f);
+	projection[1][1] *= -1;
+
+	Mesh* lastMesh = nullptr;
+	Material* lastMaterial = nullptr;
+	for (int i = 0; i < count; i++)
+	{
+		RenderObject& obj = first[i];
+		if (obj.material != lastMaterial)
+		{
+			vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, obj.material->pipeline);
+			lastMaterial = obj.material;
+		}
+		glm::mat4 model = obj.transformMatrix;
+		glm::mat4 mvp_Matrix = projection* model * view;
+
+		MeshPushConstants constant;
+		constant.render_matrix = mvp_Matrix;
+		vkCmdPushConstants(cmd, obj.material->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants),&constant);
+		if (obj.mesh != lastMesh) {
+			//bind the mesh vertex buffer with offset 0
+			VkDeviceSize offset = 0;
+			vkCmdBindVertexBuffers(cmd, 0, 1, &obj.mesh->_vertexBuffer._buffer, &offset);
+			lastMesh = obj.mesh;
+		}
+		vkCmdDraw(cmd, obj.mesh->_vertices.size(), 1, 0, 0);
+	}
+}
+
+void VulkanEngine::init_scene()
+{
+	RenderObject monkey;
+	monkey.mesh = getMesh("monkey");
+	monkey.material = get_material("defaultmesh");
+	monkey.transformMatrix = glm::mat4{ 1.0f };
+
+	_renderObject.push_back(monkey);
+	for (int x = -20; x <= 20; x++) {
+		for (int y = -20; y <= 20; y++) {
+
+			RenderObject tri;
+			tri.mesh = getMesh("triangle");
+			tri.material = get_material("defaultmesh");
+			glm::mat4 translation = glm::translate(glm::mat4{ 1.0 }, glm::vec3(x, 0, y));
+			glm::mat4 scale = glm::scale(glm::mat4{ 1.0 }, glm::vec3(0.2, 0.2, 0.2));
+			tri.transformMatrix = translation * scale;
+
+			_renderObject.push_back(tri);
+		}
+	}
+}
+
 
 void VulkanEngine::init()
 {
@@ -517,6 +606,8 @@ void VulkanEngine::init()
 	//everything went fine
 	load_mesh();
 
+	init_scene();
+
 	_isInitialized = true;
 }
 void VulkanEngine::cleanup()
@@ -548,11 +639,7 @@ void VulkanEngine::draw()
 	VK_CHECK(vkResetCommandBuffer(_commandBuffer, 0));
 
 	VkCommandBuffer cmd = _commandBuffer;
-	VkCommandBufferBeginInfo cmd_info = {};
-	cmd_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	cmd_info.pNext = nullptr;
-	cmd_info.pInheritanceInfo = nullptr;
-	cmd_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	VkCommandBufferBeginInfo cmd_info = vkinit::command_buffer_begin_info(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 	VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_info));  // buid the cmd buffer 
 
 	VkClearValue clearValue;
@@ -562,39 +649,37 @@ void VulkanEngine::draw()
 	VkClearValue depthClear;
 	depthClear.depthStencil.depth = 1.f;
 
-	VkRenderPassBeginInfo rendpass_info = {};
-	rendpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-	rendpass_info.pNext = nullptr;
+	VkClearValue clearValues[2] = { clearValue, depthClear };
 
-	rendpass_info.renderPass = _renderPass;
-	rendpass_info.renderArea.extent = _windowExtent;
-	rendpass_info.renderArea.offset.y = 0;
-	rendpass_info.renderArea.offset.x = 0;
-	rendpass_info.framebuffer = _framebuffers[swapchainImageIndex];
-
-	rendpass_info.clearValueCount = 2;
-
-	VkClearValue clearValues[2] = {clearValue, depthClear};
-	rendpass_info.pClearValues = &clearValues[0];
+	VkRenderPassBeginInfo rendpass_info = vkinit::renderpass_begin_info(
+										_renderPass,
+										_windowExtent,
+										_framebuffers[swapchainImageIndex],
+										&clearValues[0], 2
+										);
 	
 	vkCmdBeginRenderPass(cmd, &rendpass_info, VK_SUBPASS_CONTENTS_INLINE);
 	
 	// the place
-	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipelines[_selectedShader]);
 	if (_selectedShader == 3)
 	{
-		VkDeviceSize offset = 0;
-		vkCmdBindVertexBuffers(cmd, 0, 1, &_monkeyMesh._vertexBuffer._buffer, &offset);
+		//vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipelines[_selectedShader]);
+		draw_object(cmd, _renderObject.data(), _renderObject.size());
 
-		MeshPushConstants constants;
-		constants.render_matrix = UpdateDate();
-		//upload the matrix to the GPU via push constants
-		vkCmdPushConstants(cmd, _meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &constants);
-		//we can now draw
-		vkCmdDraw(cmd, _monkeyMesh._vertices.size(), 1, 0, 0);
+		//VkDeviceSize offset = 0;
+		//vkCmdBindVertexBuffers(cmd, 0, 1, &_monkeyMesh._vertexBuffer._buffer, &offset);
+
+		//MeshPushConstants constants;
+		//constants.render_matrix = UpdateDate();
+		////upload the matrix to the GPU via push constants
+		//vkCmdPushConstants(cmd, _meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &constants);
+		////we can now draw
+		//vkCmdDraw(cmd, _monkeyMesh._vertices.size(), 1, 0, 0);
 	}
 	else if (_selectedShader == 2)
 	{
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipelines[_selectedShader]);
+
 		VkDeviceSize offset = 0;
 		vkCmdBindVertexBuffers(cmd, 0, 1, &_triangleMesh._vertexBuffer._buffer, &offset);
 
@@ -606,6 +691,8 @@ void VulkanEngine::draw()
 		vkCmdDraw(cmd, _triangleMesh._vertices.size(), 1, 0, 0);
 	}
 	else{
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipelines[_selectedShader]);
+
 		vkCmdDraw(cmd, 3, 1, 0, 0);
 	}
 	//
@@ -614,38 +701,21 @@ void VulkanEngine::draw()
 	VK_CHECK(vkEndCommandBuffer(cmd));
 
 	// submit
-	VkSubmitInfo submit_info = {};
-	submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submit_info.pNext = nullptr;
-
 	VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-
-	submit_info.pWaitDstStageMask = &waitStage;
-
-	submit_info.waitSemaphoreCount = 1;
-	submit_info.pWaitSemaphores = &_presentSem;
-
-	submit_info.signalSemaphoreCount = 1;
-	submit_info.pSignalSemaphores = &_renderSem;
-
-	submit_info.commandBufferCount = 1;
-	submit_info.pCommandBuffers = &cmd;
-
+	VkSubmitInfo submit_info = vkinit::submit_info(
+							&cmd,
+							&waitStage,
+							&_presentSem, 1,
+							&_renderSem, 1
+							);
 	VK_CHECK(vkQueueSubmit(_graphicsQueue, 1, &submit_info, _renderFence)); //send to GPU
 	
 	//Display
-	VkPresentInfoKHR presentInfo = {};
-	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	presentInfo.pNext = nullptr;
-
-	presentInfo.pSwapchains = &_swapchain;
-	presentInfo.swapchainCount = 1;
-
-	presentInfo.waitSemaphoreCount = 1;
-	presentInfo.pWaitSemaphores = &_renderSem;
-
-	presentInfo.pImageIndices = &swapchainImageIndex;
-
+	VkPresentInfoKHR presentInfo = vkinit::present_info(
+								&_swapchain, 1,
+								&_renderSem, 1,
+								&swapchainImageIndex
+								);
 	VK_CHECK(vkQueuePresentKHR(_graphicsQueue, &presentInfo));
 	_frameNumber++;
 

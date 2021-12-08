@@ -9,6 +9,7 @@
 #include <functional>
 #include <deque>
 #include <glm/glm.hpp>
+#include <unordered_map>
 
 class PipelineBuilder {
 public:
@@ -33,7 +34,8 @@ struct DeletionQueue
 	void push_function(std::function<void()>&& function) {
 		deletors.push_back(function);
 	}
-		void flush() {
+	
+	void flush() {
 		// reverse iterate the deletion queue to execute all the functions
 		for (auto it = deletors.rbegin(); it != deletors.rend(); it++) {
 			(*it)(); //call the function
@@ -45,6 +47,18 @@ struct DeletionQueue
 struct MeshPushConstants {
 	glm::vec4 data;
 	glm::mat4 render_matrix;
+};
+
+struct Material {
+	VkPipeline pipeline;
+	VkPipelineLayout pipelineLayout;
+};
+
+struct RenderObject
+{
+	Mesh* mesh;
+	Material* material;
+	glm::mat4 transformMatrix;
 };
 
 class VulkanEngine {
@@ -85,13 +99,9 @@ public:
 	VkSemaphore _presentSem, _renderSem;
 	VkFence _renderFence;
 
-	VkPipelineLayout _trianglePipelineLayout;
-	VkPipelineLayout _meshPipelineLayout;
-
-	// define you need pipeline
-	std::vector<VkPipeline> _trianglePipelines;
-
 	DeletionQueue _mainDeletionQueue;
+
+	VmaAllocator _allocator;
 
 	std::vector<uint16_t> shader_index{ 0,1,2,3,4,3,4,3};
 	std::vector<uint16_t> mesh_index_shader{4,6};
@@ -103,9 +113,18 @@ public:
 		{"tri_mesh.vert.spv"}
 	};
 
-	VmaAllocator _allocator;
+	VkPipelineLayout _trianglePipelineLayout;
+	VkPipelineLayout _meshPipelineLayout;
+
+	// define you need pipeline
+	std::vector<VkPipeline> _trianglePipelines;
 	Mesh _triangleMesh;
 	Mesh _monkeyMesh;
+
+	std::vector<RenderObject> _renderObject;
+	std::unordered_map<std::string, Mesh> _meshSet;
+	std::unordered_map<std::string, Material> _material;
+
 	//initializes everything in the engine
 	void init();
 
@@ -117,6 +136,16 @@ public:
 
 	//run main loop
 	void run();
+
+	// Mesh Part
+	Material* create_material(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name);
+	Material* get_material(const std::string& name);
+	Mesh* getMesh(const std::string& name);
+	void draw_object(VkCommandBuffer cmd, RenderObject* first, int count);
+	
+	// Math
+	glm::mat4 UpdateDate();
+
 private:
 	void init_vulkan();
 	void init_swapchain();
@@ -126,11 +155,10 @@ private:
 	void init_sync_struct();
 	bool load_shader_module(const char* filePath, VkShaderModule* outShaderModule);
 	void init_pipelines();
-	bool shader_perpare(PipelineBuilder* pipelineBuilder);
 	void init_depth_image();
+	void init_scene();
+	bool shader_perpare(PipelineBuilder* pipelineBuilder);
 
-	// Mesh Part
 	void load_mesh();
 	void upload_mesh(Mesh& mesh);
-	glm::mat4 UpdateDate();
 };

@@ -18,6 +18,35 @@ namespace vkinit {
 		VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY
 		);
 
+	VkCommandBufferBeginInfo command_buffer_begin_info(VkCommandBufferUsageFlags flags = 0);
+
+	VkFramebufferCreateInfo framebuffer_create_info(
+		VkRenderPass renderPass, 
+		VkExtent2D extent, 
+		uint32_t attachment_count = 2
+		);
+
+	VkFenceCreateInfo fence_create_info(VkFenceCreateFlags flags = 0);
+
+	VkSemaphoreCreateInfo semaphore_create_info(VkSemaphoreCreateFlags flags = 0);
+
+	VkSubmitInfo submit_info(
+		VkCommandBuffer* cmd,
+		VkPipelineStageFlags* waitFlag,
+		const VkSemaphore* waitSemphore,
+		uint32_t wait_count,
+		const VkSemaphore* signalSemphore,
+		uint32_t sgnal_count
+		);
+
+	VkPresentInfoKHR present_info(
+		const VkSwapchainKHR* pSwapchains,
+		uint32_t   swapchainCount,
+		const VkSemaphore* waitSemaphores,
+		uint32_t   wait_count,
+		const uint32_t* pImageIndices
+	);
+
 	VkPipelineShaderStageCreateInfo  pipeline_shader_stage_create_info(
 		VkShaderStageFlagBits stage,
 		VkShaderModule shaderModule
@@ -40,15 +69,27 @@ namespace vkinit {
 		VkImageUsageFlags usageFlags, 
 		VkExtent3D extent
 		);
+
 	VkImageViewCreateInfo imageview_create_info(
 		VkFormat format, 
 		VkImage image, 
 		VkImageAspectFlags aspectFlags
 		);
+
 	VkPipelineDepthStencilStateCreateInfo depth_stencil_create_info(
 		bool bDepthTest,
 		bool bDepthWrite,
 		VkCompareOp compareOp
 		);
+
+	VkRenderPassBeginInfo renderpass_begin_info(
+		VkRenderPass renderPass,
+		VkExtent2D windowExtent,
+		VkFramebuffer framebuffer,
+		const VkClearValue* clearvalue,
+		uint32_t value_count = 0,
+		int32_t offset_x = 0,
+		int32_t offset_y = 0
+		); // TODO
 }
 
