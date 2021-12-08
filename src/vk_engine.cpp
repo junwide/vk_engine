@@ -332,6 +332,7 @@ void VulkanEngine::init_pipelines()
 
 	// load all shader module
 	shader_perpare(&pipelineBuilder);
+	create_material(_trianglePipelines[3], _meshPipelineLayout, "defaultmesh");
 	_mainDeletionQueue.push_function([=]() {
 		vkDestroyPipelineLayout(_device, _meshPipelineLayout, nullptr);
 		vkDestroyPipelineLayout(_device, _trianglePipelineLayout, nullptr);
@@ -466,6 +467,9 @@ void VulkanEngine::load_mesh()
 	_monkeyMesh.load_from_obj("../../assets/monkey_smooth.obj");
 	upload_mesh(_triangleMesh);
 	upload_mesh(_monkeyMesh);
+
+	_meshSet["monkey"] = _monkeyMesh;
+	_meshSet["triangle"] = _triangleMesh;
 }
 
 glm::mat4 VulkanEngine::UpdateDate()
@@ -484,6 +488,97 @@ glm::mat4 VulkanEngine::UpdateDate()
 	
 	return mesh_matrix;
 }
+
+Material* VulkanEngine::create_material(VkPipeline pipeline, VkPipelineLayout layout, const string& name)
+{
+	Material mat;
+	mat.pipeline = pipeline;
+	mat.pipelineLayout = layout;
+	_material[name] = mat;
+	return &_material[name];
+}
+
+Material* VulkanEngine::get_material(const std::string& name)
+{
+	auto it = _material.find(name);
+	if (it == _material.end())
+	{
+		return nullptr;
+	}
+	else
+	{
+		return &(*it).second;
+	}
+}
+
+Mesh* VulkanEngine::getMesh(const std::string& name)
+{
+	auto it = _meshSet.find(name);
+	if (it == _meshSet.end())
+	{
+		return nullptr;
+	}
+	else
+	{
+		return &(*it).second;
+	}
+}
+void VulkanEngine::draw_object(VkCommandBuffer cmd, RenderObject* first, int count)
+{
+	glm::vec3 camPos = { 0.f ,-6.f, -10.f };
+	glm::mat4 view = glm::translate(glm::mat4(1.f), camPos);
+	glm::mat4 projection = glm::perspective(glm::radians(70.f), 1700.f / 900.f, 0.1f, 200.0f);
+	projection[1][1] *= -1;
+
+	Mesh* lastMesh = nullptr;
+	Material* lastMaterial = nullptr;
+	for (int i = 0; i < count; i++)
+	{
+		RenderObject& obj = first[i];
+		if (obj.material != lastMaterial)
+		{
+			vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, obj.material->pipeline);
+			lastMaterial = obj.material;
+		}
+		glm::mat4 model = obj.transformMatrix;
+		glm::mat4 mvp_Matrix = projection* model * view;
+
+		MeshPushConstants constant;
+		constant.render_matrix = mvp_Matrix;
+		vkCmdPushConstants(cmd, obj.material->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants),&constant);
+		if (obj.mesh != lastMesh) {
+			//bind the mesh vertex buffer with offset 0
+			VkDeviceSize offset = 0;
+			vkCmdBindVertexBuffers(cmd, 0, 1, &obj.mesh->_vertexBuffer._buffer, &offset);
+			lastMesh = obj.mesh;
+		}
+		vkCmdDraw(cmd, obj.mesh->_vertices.size(), 1, 0, 0);
+	}
+}
+
+void VulkanEngine::init_scene()
+{
+	RenderObject monkey;
+	monkey.mesh = getMesh("monkey");
+	monkey.material = get_material("defaultmesh");
+	monkey.transformMatrix = glm::mat4{ 1.0f };
+
+	_renderObject.push_back(monkey);
+	for (int x = -20; x <= 20; x++) {
+		for (int y = -20; y <= 20; y++) {
+
+			RenderObject tri;
+			tri.mesh = getMesh("triangle");
+			tri.material = get_material("defaultmesh");
+			glm::mat4 translation = glm::translate(glm::mat4{ 1.0 }, glm::vec3(x, 0, y));
+			glm::mat4 scale = glm::scale(glm::mat4{ 1.0 }, glm::vec3(0.2, 0.2, 0.2));
+			tri.transformMatrix = translation * scale;
+
+			_renderObject.push_back(tri);
+		}
+	}
+}
+
 
 void VulkanEngine::init()
 {
@@ -516,6 +611,8 @@ void VulkanEngine::init()
 	init_pipelines();
 	//everything went fine
 	load_mesh();
+
+	init_scene();
 
 	_isInitialized = true;
 }
@@ -580,21 +677,25 @@ void VulkanEngine::draw()
 	vkCmdBeginRenderPass(cmd, &rendpass_info, VK_SUBPASS_CONTENTS_INLINE);
 	
 	// the place
-	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipelines[_selectedShader]);
 	if (_selectedShader == 3)
 	{
-		VkDeviceSize offset = 0;
-		vkCmdBindVertexBuffers(cmd, 0, 1, &_monkeyMesh._vertexBuffer._buffer, &offset);
+		//vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipelines[_selectedShader]);
+		draw_object(cmd, _renderObject.data(), _renderObject.size());
 
-		MeshPushConstants constants;
-		constants.render_matrix = UpdateDate();
-		//upload the matrix to the GPU via push constants
-		vkCmdPushConstants(cmd, _meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &constants);
-		//we can now draw
-		vkCmdDraw(cmd, _monkeyMesh._vertices.size(), 1, 0, 0);
+		//VkDeviceSize offset = 0;
+		//vkCmdBindVertexBuffers(cmd, 0, 1, &_monkeyMesh._vertexBuffer._buffer, &offset);
+
+		//MeshPushConstants constants;
+		//constants.render_matrix = UpdateDate();
+		////upload the matrix to the GPU via push constants
+		//vkCmdPushConstants(cmd, _meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &constants);
+		////we can now draw
+		//vkCmdDraw(cmd, _monkeyMesh._vertices.size(), 1, 0, 0);
 	}
 	else if (_selectedShader == 2)
 	{
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipelines[_selectedShader]);
+
 		VkDeviceSize offset = 0;
 		vkCmdBindVertexBuffers(cmd, 0, 1, &_triangleMesh._vertexBuffer._buffer, &offset);
 
@@ -606,6 +707,8 @@ void VulkanEngine::draw()
 		vkCmdDraw(cmd, _triangleMesh._vertices.size(), 1, 0, 0);
 	}
 	else{
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipelines[_selectedShader]);
+
 		vkCmdDraw(cmd, 3, 1, 0, 0);
 	}
 	//
