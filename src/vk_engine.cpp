@@ -157,14 +157,9 @@ void VulkanEngine::init_default_renderpass()
 
 void VulkanEngine::init_framebuffers()
 {
-	VkFramebufferCreateInfo framebuffer_info = {};
-	framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-	framebuffer_info.pNext = nullptr;
-	framebuffer_info.renderPass = _renderPass;
-	framebuffer_info.attachmentCount = 2;
-	framebuffer_info.height = _windowExtent.height;
-	framebuffer_info.width = _windowExtent.width;
-	framebuffer_info.layers = 1;
+	VkFramebufferCreateInfo framebuffer_info = vkinit::framebuffer_create_info(
+												_renderPass,
+												_windowExtent);
 	
 	const uint32_t swapchain_count = static_cast<uint32_t>(_swapchainImages.size());
 	_framebuffers = vector<VkFramebuffer>(swapchain_count);
@@ -175,6 +170,7 @@ void VulkanEngine::init_framebuffers()
 		attachments[1] = _depthImageView;
 		framebuffer_info.pAttachments = attachments;
 		VK_CHECK(vkCreateFramebuffer(_device, &framebuffer_info, nullptr, &_framebuffers[i]));
+		
 		_mainDeletionQueue.push_function([=]() {
 			vkDestroyFramebuffer(_device, _framebuffers[i], nullptr);
 			vkDestroyImageView(_device, _swapchainImageViews[i], nullptr);
@@ -184,20 +180,18 @@ void VulkanEngine::init_framebuffers()
 
 void VulkanEngine::init_sync_struct()
 {
-	VkFenceCreateInfo fence_info = {};
-	fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-	fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-	fence_info.pNext = nullptr;
+	//create syncronization structures
+	//one fence to control when the gpu has finished rendering the frame,
+	//and 2 semaphores to syncronize rendering with swapchain
+	//we want the fence to start signalled so we can wait on it on the first frame
+	VkFenceCreateInfo fence_info = vkinit::fence_create_info(VK_FENCE_CREATE_SIGNALED_BIT);
 	VK_CHECK(vkCreateFence(_device, &fence_info, nullptr, &_renderFence));
 
 	_mainDeletionQueue.push_function([=]() {
 		vkDestroyFence(_device, _renderFence, nullptr);
 	});
 
-	VkSemaphoreCreateInfo sem_info = {};
-	sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-	sem_info.flags = 0;
-	sem_info.pNext = nullptr;
+	VkSemaphoreCreateInfo sem_info = vkinit::semaphore_create_info();
 	VK_CHECK(vkCreateSemaphore(_device, &sem_info, nullptr, &_presentSem));
 	VK_CHECK(vkCreateSemaphore(_device, &sem_info, nullptr, &_renderSem));
 
@@ -645,11 +639,7 @@ void VulkanEngine::draw()
 	VK_CHECK(vkResetCommandBuffer(_commandBuffer, 0));
 
 	VkCommandBuffer cmd = _commandBuffer;
-	VkCommandBufferBeginInfo cmd_info = {};
-	cmd_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	cmd_info.pNext = nullptr;
-	cmd_info.pInheritanceInfo = nullptr;
-	cmd_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	VkCommandBufferBeginInfo cmd_info = vkinit::command_buffer_begin_info(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 	VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_info));  // buid the cmd buffer 
 
 	VkClearValue clearValue;
@@ -659,20 +649,14 @@ void VulkanEngine::draw()
 	VkClearValue depthClear;
 	depthClear.depthStencil.depth = 1.f;
 
-	VkRenderPassBeginInfo rendpass_info = {};
-	rendpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-	rendpass_info.pNext = nullptr;
+	VkClearValue clearValues[2] = { clearValue, depthClear };
 
-	rendpass_info.renderPass = _renderPass;
-	rendpass_info.renderArea.extent = _windowExtent;
-	rendpass_info.renderArea.offset.y = 0;
-	rendpass_info.renderArea.offset.x = 0;
-	rendpass_info.framebuffer = _framebuffers[swapchainImageIndex];
-
-	rendpass_info.clearValueCount = 2;
-
-	VkClearValue clearValues[2] = {clearValue, depthClear};
-	rendpass_info.pClearValues = &clearValues[0];
+	VkRenderPassBeginInfo rendpass_info = vkinit::renderpass_begin_info(
+										_renderPass,
+										_windowExtent,
+										_framebuffers[swapchainImageIndex],
+										&clearValues[0], 2
+										);
 	
 	vkCmdBeginRenderPass(cmd, &rendpass_info, VK_SUBPASS_CONTENTS_INLINE);
 	
@@ -717,38 +701,21 @@ void VulkanEngine::draw()
 	VK_CHECK(vkEndCommandBuffer(cmd));
 
 	// submit
-	VkSubmitInfo submit_info = {};
-	submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submit_info.pNext = nullptr;
-
 	VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-
-	submit_info.pWaitDstStageMask = &waitStage;
-
-	submit_info.waitSemaphoreCount = 1;
-	submit_info.pWaitSemaphores = &_presentSem;
-
-	submit_info.signalSemaphoreCount = 1;
-	submit_info.pSignalSemaphores = &_renderSem;
-
-	submit_info.commandBufferCount = 1;
-	submit_info.pCommandBuffers = &cmd;
-
+	VkSubmitInfo submit_info = vkinit::submit_info(
+							&cmd,
+							&waitStage,
+							&_presentSem, 1,
+							&_renderSem, 1
+							);
 	VK_CHECK(vkQueueSubmit(_graphicsQueue, 1, &submit_info, _renderFence)); //send to GPU
 	
 	//Display
-	VkPresentInfoKHR presentInfo = {};
-	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	presentInfo.pNext = nullptr;
-
-	presentInfo.pSwapchains = &_swapchain;
-	presentInfo.swapchainCount = 1;
-
-	presentInfo.waitSemaphoreCount = 1;
-	presentInfo.pWaitSemaphores = &_renderSem;
-
-	presentInfo.pImageIndices = &swapchainImageIndex;
-
+	VkPresentInfoKHR presentInfo = vkinit::present_info(
+								&_swapchain, 1,
+								&_renderSem, 1,
+								&swapchainImageIndex
+								);
 	VK_CHECK(vkQueuePresentKHR(_graphicsQueue, &presentInfo));
 	_frameNumber++;
 

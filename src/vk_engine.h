@@ -99,13 +99,9 @@ public:
 	VkSemaphore _presentSem, _renderSem;
 	VkFence _renderFence;
 
-	VkPipelineLayout _trianglePipelineLayout;
-	VkPipelineLayout _meshPipelineLayout;
-
-	// define you need pipeline
-	std::vector<VkPipeline> _trianglePipelines;
-
 	DeletionQueue _mainDeletionQueue;
+
+	VmaAllocator _allocator;
 
 	std::vector<uint16_t> shader_index{ 0,1,2,3,4,3,4,3};
 	std::vector<uint16_t> mesh_index_shader{4,6};
@@ -117,7 +113,11 @@ public:
 		{"tri_mesh.vert.spv"}
 	};
 
-	VmaAllocator _allocator;
+	VkPipelineLayout _trianglePipelineLayout;
+	VkPipelineLayout _meshPipelineLayout;
+
+	// define you need pipeline
+	std::vector<VkPipeline> _trianglePipelines;
 	Mesh _triangleMesh;
 	Mesh _monkeyMesh;
 
