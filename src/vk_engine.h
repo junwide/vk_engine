@@ -103,23 +103,15 @@ public:
 
 	VmaAllocator _allocator;
 
-	std::vector<uint16_t> shader_index{ 0,1,2,3,4,3,4,3};
-	std::vector<uint16_t> mesh_index_shader{4,6};
-	std::vector<std::string> shader_name{
-		{"triangle.vert.spv"},
-		{"triangle.frag.spv"},
-		{"colored_triangle.vert.spv"},
-		{"colored_triangle.frag.spv"},
-		{"tri_mesh.vert.spv"}
-	};
+	std::vector<uint16_t> shader_index;
+	std::vector<std::string> obj_name;
+	std::vector<std::string> shader_name;
 
-	VkPipelineLayout _trianglePipelineLayout;
 	VkPipelineLayout _meshPipelineLayout;
 
 	// define you need pipeline
 	std::vector<VkPipeline> _trianglePipelines;
-	Mesh _triangleMesh;
-	Mesh _monkeyMesh;
+	//Mesh _triangleMesh;
 
 	std::vector<RenderObject> _renderObject;
 	std::unordered_map<std::string, Mesh> _meshSet;
@@ -144,7 +136,7 @@ public:
 	void draw_object(VkCommandBuffer cmd, RenderObject* first, int count);
 	
 	// Math
-	glm::mat4 UpdateDate();
+	glm::mat4 UpdateDate(int obj_indx);
 
 private:
 	void init_vulkan();

@@ -1,5 +1,9 @@
 ﻿#include <vk_initializers.h>
+#include <vector>
 
+#include <writer.h>
+#include <stringbuffer.h>
+#include <sstream>
 namespace vkinit {
 	VkCommandPoolCreateInfo vkinit::command_pool_create_info
 	(uint32_t queueFamilyIndex,
@@ -313,5 +317,124 @@ namespace vkinit {
 
 		return info;
 	}
+
+	VkBufferCreateInfo vkinit::buffer_create_info(
+		VkStructureType s_type,
+		VkBufferUsageFlags usage,
+		VkDeviceSize size
+	)
+	{
+		VkBufferCreateInfo buffer_info = {};
+		buffer_info.sType = s_type;
+		buffer_info.usage = usage;
+		buffer_info.size = size;
+		return buffer_info;
+	}
+	VkResult vkinit::pipeline_get_viewport(
+		PipelineBuilder* pipeline_builder,
+		VkExtent2D window,
+		float maxDepth,
+		float minDepth,
+		float offset_x,
+		float offset_y
+	)
+	{
+		if (pipeline_builder == nullptr)
+		{
+			return VK_ERROR_UNKNOWN;
+		}
+		pipeline_builder->_viewport.height = window.height;
+		pipeline_builder->_viewport.width = window.width;
+		pipeline_builder->_viewport.maxDepth = maxDepth;
+		pipeline_builder->_viewport.minDepth = minDepth;
+		pipeline_builder->_viewport.x = offset_x;
+		pipeline_builder->_viewport.y = offset_y;
+		return VK_SUCCESS;
+	}
+
+	VkResult vkinit::pipeline_get_scissor(
+		PipelineBuilder* pipeline_builder,
+		VkRect2D window
+	)
+	{
+		if (pipeline_builder == nullptr)
+		{
+			return VK_ERROR_UNKNOWN;
+		}
+		pipeline_builder->_scissor = window;
+		return VK_SUCCESS;
+	}
+
+	VkResult vkinit::pipelineLayoutinfo_get_pushConstant(
+		std::vector<VkPushConstantRange> &push_constant,
+		VkShaderStageFlags flag,
+		uint32_t struct_size,
+		uint32_t pushconstant_count
+	)
+	{
+		if (struct_size == 0)
+		{
+			return VK_ERROR_UNKNOWN;
+		}
+		push_constant.resize(pushconstant_count);
+		{
+			
+			for (int index = 0; index < pushconstant_count; index++)
+			{
+				push_constant[index].offset = 0 + struct_size * index;
+				push_constant[index].size = struct_size;
+				push_constant[index].stageFlags = flag;
+			}
+		}
+		return VK_SUCCESS;
+	}
+
+	VkResult vkinit::shadername_get(
+		std::vector<std::string>& shader_name,
+		std::vector<uint16_t>& shader_index,
+		std::vector<std::string>& obj_name,
+		rapidjson::Document &object
+	)
+	{
+		{
+			const rapidjson::Value& shader_set = object["shader"];
+			for (rapidjson::SizeType i = 0 ; i < shader_set.Size(); i++)
+			{
+				shader_name.push_back(shader_set[i]["name"].GetString());
+			}
+		}
+		{
+			const rapidjson::Value& shader_set = object["object"];
+			for (rapidjson::SizeType i = 0; i < shader_set.Size(); i++)
+			{
+				obj_name.push_back(shader_set[i]["Mode_name"].GetString());
+				shader_index.push_back(shader_set[i]["Vertex_shader"].GetInt());
+				shader_index.push_back(shader_set[i]["Fragment_shader"].GetInt());
+			}
+		}
+		return VK_SUCCESS;
+	}
 }
 
+namespace file_box 
+{
+
+	VkResult file_box::readfile(
+					rapidjson::Document& object,
+					const std::string file_name, 
+					const std::string file_path)
+	{
+		std::fstream fs;
+		std::string flie = file_path + file_name;
+		fs.open(flie, std::fstream::in | std::fstream::out);
+		if (!fs.is_open())
+		{
+			return VK_ERROR_UNKNOWN;
+		}
+		std::stringstream string_buffer;
+		string_buffer << fs.rdbuf();
+		fs.close();
+		object.Parse(string_buffer.str().c_str());
+		return VK_SUCCESS;
+	}
+}

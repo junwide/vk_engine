@@ -1,0 +1,24 @@
+{
+    "shader":[
+		{"name":"colored_triangle.vert.spv"},
+		{"name":"colored_triangle.frag.spv"},
+		{"name":"tri_mesh.vert.spv"}
+    ],
+    "object":[
+        {
+            "Mode_name": "monkey_smooth.obj",
+            "Vertex_shader": 2,
+            "Fragment_shader": 1
+        },
+        {
+            "Mode_name": "Rayquaza.obj",
+            "Vertex_shader": 2,
+            "Fragment_shader": 1
+        },
+        {
+            "Mode_name": "Full_Piece.obj",
+            "Vertex_shader": 2,
+            "Fragment_shader": 1
+        }
+    ]
+}

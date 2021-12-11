@@ -96,7 +96,6 @@ bool Mesh::load_from_obj(const char* filename)
 				//we are setting the vertex color as the vertex normal. This is just for display purposes
 				new_vert.color = new_vert.normal;
 
-
 				_vertices.push_back(new_vert);
 			}
 			index_offset += fv;
