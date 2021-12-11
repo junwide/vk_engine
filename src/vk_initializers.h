@@ -4,7 +4,10 @@
 #pragma once
 
 #include <vk_types.h>
-
+#include "vk_engine.h"
+#include <fstream>
+#include <string>
+#include <document.h>
 namespace vkinit {
 
 	VkCommandPoolCreateInfo command_pool_create_info(
@@ -90,6 +93,50 @@ namespace vkinit {
 		uint32_t value_count = 0,
 		int32_t offset_x = 0,
 		int32_t offset_y = 0
-		); // TODO
+		);
+
+	VkBufferCreateInfo buffer_create_info(
+		VkStructureType s_type,
+		VkBufferUsageFlags usage,
+		VkDeviceSize size
+	);
+
+	VkResult pipeline_get_viewport(
+		PipelineBuilder* pipeline_builder,
+		VkExtent2D window,
+		float maxDepth = 1.0f,
+		float minDepth = 0.0,
+		float offset_x = 0.0,
+		float offset_y = 0.0
+	);
+
+	VkResult pipeline_get_scissor(
+		PipelineBuilder* pipeline_builder,
+		VkRect2D window
+	);
+
+	VkResult pipelineLayoutinfo_get_pushConstant(
+		std::vector<VkPushConstantRange>& push_constant,
+		VkShaderStageFlags flag,
+		uint32_t struct_size,
+		uint32_t pushconstant_count = 1
+	);
+
+	VkResult shadername_get(
+		std::vector<std::string>& shader_name,
+		std::vector<uint16_t> &shader_index,
+		std::vector<std::string> &obj_name,
+		rapidjson::Document &object
+	);
+
+}
+
+namespace file_box {
+	VkResult readfile(
+					rapidjson::Document& object,
+					const std::string file_name, 
+					const std::string file_path = "../../json/");
+
+
 }
 
