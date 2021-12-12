@@ -70,12 +70,21 @@ struct movestatus
 	glm::mat4 transformMatrix = glm::mat4{ 1.0f };
 };
 
+struct GPUCameraData {
+	glm::mat4 view;
+	glm::mat4 projection;
+	glm::mat4 viewproj;
+};
+
 struct FrameData {
 	VkSemaphore _presentSem, _renderSem;
 	VkFence _renderFence;
 
 	VkCommandPool _commandPool;
 	VkCommandBuffer _commandBuffer;
+
+	AllocatedBuffer cameraBuffer;
+	VkDescriptorSet globalDescriptor;
 };
 
 class VulkanEngine {
@@ -105,11 +114,6 @@ public:
 	AllocatedImage _depthImage;
 	VkFormat _depthFormat;
 
-	//VkCommandPool _commandPool;
-	//VkCommandBuffer _commandBuffer;
-	//VkSemaphore _presentSem, _renderSem;
-	//VkFence _renderFence;
-
 	FrameData _frames[FRAME_OVERLAP];
 
 	VkQueue _graphicsQueue;
@@ -126,12 +130,12 @@ public:
 	std::vector<std::string> obj_name;
 	std::vector<std::string> shader_name;
 
-	VkPipelineLayout _meshPipelineLayout;
-
+	VkPipelineLayout _meshPipelineLayout;  // Temp var
+	VkDescriptorSetLayout _globalSetLayout;
+	VkDescriptorPool _descriptorPool;
+	
+	
 	// define you need pipeline
-	std::vector<VkPipeline> _trianglePipelines;
-	//Mesh _triangleMesh;
-
 	std::vector<RenderObject> _renderObject;
 	std::unordered_map<std::string, Mesh> _meshSet;
 	std::unordered_map<std::string, Material> _material;
@@ -148,6 +152,11 @@ public:
 	//run main loop
 	void run();
 
+	AllocatedBuffer create_buffer(
+		size_t allocSize,
+		VkBufferUsageFlags usage,
+		VmaMemoryUsage memoryUsage
+	);
 	// Mesh Part
 	Material* create_material(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name);
 	Material* get_material(const std::string& name);
@@ -156,7 +165,7 @@ public:
 	FrameData& get_current_frame();
 	
 	// Math
-	glm::mat4 UpdateDate(int obj_indx);
+	void UpdateDate(int obj_indx);
 
 private:
 	void init_vulkan();
@@ -174,4 +183,5 @@ private:
 	void load_mesh();
 	void upload_mesh(Mesh& mesh);
 	void key_event_process(int32_t keycode);
+	void init_descriptors();
 };

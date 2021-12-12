@@ -129,6 +129,40 @@ namespace vkinit {
 		rapidjson::Document &object
 	);
 
+	VkDescriptorSetLayoutBinding descriptor_setlayout_binding(
+		uint32_t              binding,
+		VkDescriptorType      descriptorType,
+		uint32_t              descriptorCount,
+		VkShaderStageFlags    stageFlags
+	);
+
+	VkDescriptorSetLayoutCreateInfo descriptor_setlayout_info(
+		uint32_t   bindingCount,
+		VkDescriptorSetLayoutBinding& pBindings,
+		VkDescriptorSetLayoutCreateFlags  flags = 0
+	);
+
+	VkDescriptorPoolCreateInfo descriptorpool_create_info(
+		uint32_t  maxSets,
+		VkDescriptorPoolSize* pPoolSizes,
+		uint32_t poolSizeCount,
+		VkDescriptorPoolCreateFlags    flags = 0
+	);
+
+	VkDescriptorSetAllocateInfo descriptorset_allocate_info(
+		VkDescriptorPool     descriptorPool,
+		uint32_t             descriptorSetCount,
+		VkDescriptorSetLayout& pSetLayouts
+	);
+
+	VkDescriptorBufferInfo descriptor_buffer_info(
+		VkBuffer        buffer,
+		VkDeviceSize    offset,
+		VkDeviceSize    range
+	);
+
+	//VkWriteDescriptorSet write_descriptor_set(
+	//);
 }
 
 namespace file_box {
