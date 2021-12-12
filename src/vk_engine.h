@@ -58,7 +58,15 @@ struct RenderObject
 {
 	Mesh* mesh;
 	Material* material;
+	glm::vec3 camPos;
 	glm::mat4 transformMatrix;
+};
+
+struct movestatus
+{
+	uint8_t current_handle[2] = { 0, 0 };
+	glm::vec3 camPos = { 0.f, 0.f ,0.f };
+	glm::mat4 transformMatrix = glm::mat4{ 1.0f };
 };
 
 class VulkanEngine {
@@ -116,7 +124,7 @@ public:
 	std::vector<RenderObject> _renderObject;
 	std::unordered_map<std::string, Mesh> _meshSet;
 	std::unordered_map<std::string, Material> _material;
-
+	struct movestatus _movestatus;
 	//initializes everything in the engine
 	void init();
 
@@ -153,4 +161,5 @@ private:
 
 	void load_mesh();
 	void upload_mesh(Mesh& mesh);
+	void key_event_process(int32_t keycode);
 };
