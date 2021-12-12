@@ -472,16 +472,21 @@ glm::mat4 VulkanEngine::UpdateDate(int obj_index)
 		cam_p[1] = -9.f;
 		cam_p[2] = -220.f;
 	}
-	glm::vec3 camPos = { 0.f,cam_p[1],cam_p[2] };
+	glm::vec3 camPos = _renderObject[_selectedShader].camPos + _movestatus.camPos;
+	_renderObject[_selectedShader].camPos = camPos;
+	_movestatus.camPos = { 0.f, 0.f, 0.f };
 
 	glm::mat4 view = glm::translate(glm::mat4(1.f), camPos);
 	//camera projection
 	glm::mat4 projection = glm::perspective(glm::radians(70.f), 1700.f / 900.f, 0.1f, 200.0f);
 	projection[1][1] *= -1;
 	//model rotation
-	glm::mat4 model = glm::rotate(glm::mat4{ 1.0f }, glm::radians(_frameNumber * 0.4f), glm::vec3(0, 1, 0));
+	glm::mat4 model = _movestatus.transformMatrix * _renderObject[_selectedShader].transformMatrix;
+	_renderObject[_selectedShader].transformMatrix = model;
+	_movestatus.transformMatrix = glm::mat4{ 1.f };
+	//glm::mat4 model = glm::rotate(glm::mat4{ 1.0f }, glm::radians(_frameNumber * 0.4f), glm::vec3(0, 1, 0));
 
-	//calculate final mesh matrix
+	//calculate final mesh matrix 
 	glm::mat4 mesh_matrix = projection * view * model;
 	
 	return mesh_matrix;
@@ -562,6 +567,7 @@ void VulkanEngine::init_scene()
 		mesh_obj.mesh = getMesh(name);
 		mesh_obj.material = get_material("defaultmesh");
 		mesh_obj.transformMatrix = glm::mat4{ 1.0f };
+		mesh_obj.camPos = { 0.f,0.f ,-2.f };
 		_renderObject.push_back(mesh_obj);
 	}
 	//_renderObject.push_back(monkey);
@@ -578,6 +584,50 @@ void VulkanEngine::init_scene()
 	//		_renderObject.push_back(tri);
 	//	}
 	//}
+}
+
+void VulkanEngine::key_event_process(int32_t keycode)
+{
+	int mode_count = obj_name.size();
+	int selected = keycode - SDLK_1;
+	if (selected < 9 && selected >= 0)
+	{
+		_selectedShader = selected;
+		return;
+	}
+
+	switch (keycode)
+	{
+	case SDLK_a:
+		 _movestatus.transformMatrix = glm::rotate(glm::mat4{ 1.0f }, glm::radians(5.f), glm::vec3(0, 1, 0));
+		break;
+	case SDLK_d:
+		_movestatus.transformMatrix = glm::rotate(glm::mat4{ 1.0f }, glm::radians(-5.f), glm::vec3(0, 1, 0));
+		break;
+	case SDLK_w:
+		_movestatus.transformMatrix = glm::rotate(glm::mat4{ 1.0f }, glm::radians(5.f), glm::vec3(1, 0, 0));
+		break;
+	case SDLK_s:
+		_movestatus.transformMatrix = glm::rotate(glm::mat4{ 1.0f }, glm::radians(-5.f), glm::vec3(1, 0, 0));
+		break;
+	case SDLK_q:
+		_movestatus.camPos[2] = -1.f;
+		break;
+	case SDLK_e:
+		_movestatus.camPos[2] = 1.f;
+		break;
+	case SDLK_x:
+		_movestatus.current_handle[0] = _movestatus.current_handle[0] ^ 0x01;
+		break;
+	case SDLK_z:
+		_movestatus.camPos[_movestatus.current_handle[0]] = -1.f;
+		break;
+	case SDLK_c:
+		_movestatus.camPos[_movestatus.current_handle[0]] = 1.f;
+		break;
+	default:
+		break;
+	}
 }
 
 
@@ -734,14 +784,7 @@ void VulkanEngine::run()
 			}
 			else if (e.type == SDL_KEYDOWN)
 			{
-				if (e.key.keysym.sym == SDLK_SPACE)
-				{
-					_selectedShader += 1;
-					if (_selectedShader > obj_name.size() -1 )
-					{
-						_selectedShader = 0;
-					}
-				}
+				key_event_process(e.key.keysym.sym);
 			}
 		}
 
