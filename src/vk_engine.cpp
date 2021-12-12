@@ -247,7 +247,7 @@ bool VulkanEngine::load_shader_module(const char* filePath, VkShaderModule* outS
 
 bool VulkanEngine::shader_perpare(PipelineBuilder* pipelineBuilder)
 {
-	
+	VkPipeline _trianglePipelines;
 	uint8_t shader_count = static_cast<uint8_t> (shader_index.size());
 	vector<VkShaderModule> targetShader(shader_count);
 	VertexInputDescription vertexDescription = Vertex::get_vertex_description();
@@ -280,12 +280,12 @@ bool VulkanEngine::shader_perpare(PipelineBuilder* pipelineBuilder)
 
 		if (flag_build){
 			pipelineBuilder->_depthStencil = vkinit::depth_stencil_create_info(true, true, VK_COMPARE_OP_LESS_OR_EQUAL);
-			_trianglePipelines.push_back(pipelineBuilder->build_pipline(_device, _renderPass));
-			create_material(_trianglePipelines.back(), _meshPipelineLayout, "defaultmesh");
+			_trianglePipelines = pipelineBuilder->build_pipline(_device, _renderPass);
+			create_material(_trianglePipelines, _meshPipelineLayout, "defaultmesh");
 			pipelineBuilder->_shaderStages.clear();
 
 			_mainDeletionQueue.push_function([=]() {
-				vkDestroyPipeline(_device, _trianglePipelines[i/2], nullptr);
+				vkDestroyPipeline(_device, _trianglePipelines, nullptr);
 				});
 
 			vkDestroyShaderModule(_device, targetShader[i], nullptr);
@@ -308,6 +308,8 @@ void VulkanEngine::init_pipelines()
 														1));
 	mesh_pipeline_layout_info.pushConstantRangeCount = 1;
 	mesh_pipeline_layout_info.pPushConstantRanges = &push_constant[0];
+	mesh_pipeline_layout_info.pSetLayouts = &_globalSetLayout;
+	mesh_pipeline_layout_info.setLayoutCount = 1;
 	VK_CHECK(vkCreatePipelineLayout(_device, &mesh_pipeline_layout_info, nullptr, &_meshPipelineLayout));
 
 	PipelineBuilder pipelineBuilder;
@@ -474,7 +476,7 @@ FrameData& VulkanEngine::get_current_frame()
 	return _frames[_frameNumber % FRAME_OVERLAP];
 }
 
-glm::mat4 VulkanEngine::UpdateDate(int obj_index)
+void VulkanEngine::UpdateDate(int obj_index)
 {
 	glm::vec3 camPos = _renderObject[_selectedShader].camPos + _movestatus.camPos;
 	_renderObject[_selectedShader].camPos = camPos;
@@ -485,15 +487,22 @@ glm::mat4 VulkanEngine::UpdateDate(int obj_index)
 	glm::mat4 projection = glm::perspective(glm::radians(70.f), 1700.f / 900.f, 0.1f, 200.0f);
 	projection[1][1] *= -1;
 	//model rotation
-	glm::mat4 model = _movestatus.transformMatrix * _renderObject[_selectedShader].transformMatrix;
-	_renderObject[_selectedShader].transformMatrix = model;
-	_movestatus.transformMatrix = glm::mat4{ 1.f };
-	//glm::mat4 model = glm::rotate(glm::mat4{ 1.0f }, glm::radians(_frameNumber * 0.4f), glm::vec3(0, 1, 0));
+	_renderObject[obj_index].transformMatrix = _movestatus.transformMatrix;
+	//_renderObject[_selectedShader].transformMatrix = model;
+	//_movestatus.transformMatrix = glm::mat4{ 1.f };
 
-	//calculate final mesh matrix 
-	glm::mat4 mesh_matrix = projection * view * model;
-	
-	return mesh_matrix;
+
+	GPUCameraData camData;
+	camData.projection = projection;
+	camData.view = view;
+	//camData.viewproj = projection * view;
+
+	void* data;
+	vmaMapMemory(_allocator, get_current_frame().cameraBuffer._allocation, &data);
+	memcpy(data, &camData, sizeof(GPUCameraData));
+	vmaUnmapMemory(_allocator, get_current_frame().cameraBuffer._allocation);
+
+	return;
 }
 
 Material* VulkanEngine::create_material(VkPipeline pipeline, VkPipelineLayout layout, const string& name)
@@ -589,6 +598,94 @@ void VulkanEngine::init_scene()
 	//	}
 	//}
 }
+AllocatedBuffer VulkanEngine::create_buffer(
+	size_t allocSize,
+	VkBufferUsageFlags usage,
+	VmaMemoryUsage memoryUsage
+) 
+{
+	VkBufferCreateInfo buffer_info = vkinit::buffer_create_info(
+		VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+		usage,
+		allocSize
+	);
+	// allocation not allocator
+	VmaAllocationCreateInfo vmaalloc_info = {};
+	vmaalloc_info.usage = memoryUsage;
+
+	AllocatedBuffer newBuffer;
+
+	VK_CHECK(vmaCreateBuffer(_allocator,
+		&buffer_info,
+		&vmaalloc_info,
+		&newBuffer._buffer,
+		&newBuffer._allocation,
+		nullptr));
+
+	_mainDeletionQueue.push_function([=]() {
+		vmaDestroyBuffer(_allocator, newBuffer._buffer, newBuffer._allocation);
+		});
+	return newBuffer;
+}
+void VulkanEngine::init_descriptors()
+{
+	//information about the binding.
+	VkDescriptorSetLayoutBinding camBufferBinding = vkinit::descriptor_setlayout_binding(
+				/* it's a uniform buffer binding*/		0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			/* we use it from the vertex shader*/		1, VK_SHADER_STAGE_VERTEX_BIT
+														);
+	VkDescriptorSetLayoutCreateInfo setInfo = vkinit::descriptor_setlayout_info(1, camBufferBinding);
+	VK_CHECK(vkCreateDescriptorSetLayout(_device, &setInfo, nullptr, &_globalSetLayout));
+	
+	_mainDeletionQueue.push_function([=]() {
+		vkDestroyDescriptorSetLayout(_device, _globalSetLayout, nullptr);
+		});
+	std::vector<VkDescriptorPoolSize> sizes =
+	{
+		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10 }
+	};
+	VkDescriptorPoolCreateInfo pool_info = vkinit::descriptorpool_create_info(10, sizes.data(), sizes.size() );
+
+	VK_CHECK(vkCreateDescriptorPool(_device, &pool_info, nullptr, &_descriptorPool));
+	_mainDeletionQueue.push_function([=]() {
+		vkDestroyDescriptorPool(_device, _descriptorPool, nullptr);
+		});
+
+	for (int i = 0; i < FRAME_OVERLAP; i++)
+	{
+		_frames[i].cameraBuffer = create_buffer(
+									sizeof(GPUCameraData),
+									VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+									VMA_MEMORY_USAGE_CPU_TO_GPU
+									);
+		VkDescriptorSetAllocateInfo allocInfo = vkinit::descriptorset_allocate_info(_descriptorPool, 1, _globalSetLayout);
+		VK_CHECK(vkAllocateDescriptorSets(_device, &allocInfo, &_frames[i].globalDescriptor));
+
+		//_mainDeletionQueue.push_function([=]() {
+		//	vkFreeDescriptorSets(_device, _descriptorPool, 1, &_frames[i].globalDescriptor);
+		//});
+
+		VkDescriptorBufferInfo binfo = vkinit::descriptor_buffer_info(
+												_frames[i].cameraBuffer._buffer, 
+												0, sizeof(GPUCameraData)
+												);
+		VkWriteDescriptorSet setWrite = {};
+		setWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		setWrite.pNext = nullptr;
+
+		//we are going to write into binding number 0
+		setWrite.dstBinding = 0;
+		//of the global descriptor
+		setWrite.dstSet = _frames[i].globalDescriptor;
+
+		setWrite.descriptorCount = 1;
+		//and the type is uniform buffer
+		setWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		setWrite.pBufferInfo = &binfo;
+
+		vkUpdateDescriptorSets(_device, 1, &setWrite, 0, nullptr);
+	}
+}
 
 void VulkanEngine::key_event_process(int32_t keycode)
 {
@@ -603,16 +700,16 @@ void VulkanEngine::key_event_process(int32_t keycode)
 	switch (keycode)
 	{
 	case SDLK_a:
-		 _movestatus.transformMatrix = glm::rotate(glm::mat4{ 1.0f }, glm::radians(5.f), glm::vec3(0, 1, 0));
+		 _movestatus.transformMatrix *= glm::rotate(glm::mat4{ 1.0f }, glm::radians(5.f), glm::vec3(0, 1, 0));
 		break;
 	case SDLK_d:
-		_movestatus.transformMatrix = glm::rotate(glm::mat4{ 1.0f }, glm::radians(-5.f), glm::vec3(0, 1, 0));
+		_movestatus.transformMatrix *= glm::rotate(glm::mat4{ 1.0f }, glm::radians(-5.f), glm::vec3(0, 1, 0));
 		break;
 	case SDLK_w:
-		_movestatus.transformMatrix = glm::rotate(glm::mat4{ 1.0f }, glm::radians(5.f), glm::vec3(1, 0, 0));
+		_movestatus.transformMatrix *= glm::rotate(glm::mat4{ 1.0f }, glm::radians(5.f), glm::vec3(1, 0, 0));
 		break;
 	case SDLK_s:
-		_movestatus.transformMatrix = glm::rotate(glm::mat4{ 1.0f }, glm::radians(-5.f), glm::vec3(1, 0, 0));
+		_movestatus.transformMatrix *= glm::rotate(glm::mat4{ 1.0f }, glm::radians(-5.f), glm::vec3(1, 0, 0));
 		break;
 	case SDLK_q:
 		_movestatus.camPos[2] = -1.f;
@@ -662,6 +759,8 @@ void VulkanEngine::init()
 	init_framebuffers();
 
 	init_sync_struct();
+
+	init_descriptors();
 
 	init_pipelines();
 	//everything went fine
@@ -727,14 +826,16 @@ void VulkanEngine::draw()
 	//{
 	//	draw_object(cmd, _renderObject.data(), _renderObject.size());
 	//}
-	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipelines[_selectedShader]);
-
+	//vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipelines[_selectedShader]);
+	UpdateDate(_selectedShader);
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _renderObject[_selectedShader].material->pipeline);
+	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _renderObject[_selectedShader].material->pipelineLayout, 0, 1, &get_current_frame().globalDescriptor, 0, nullptr);
 	VkDeviceSize offset = 0; 
 	vkCmdBindVertexBuffers(cmd, 0, 1, &_renderObject[_selectedShader].mesh->_vertexBuffer._buffer, &offset);
 	MeshPushConstants constants;
-	constants.render_matrix = UpdateDate(_selectedShader);
+	constants.render_matrix = _renderObject[_selectedShader].transformMatrix;
 	//upload the matrix to the GPU via push constants
-	vkCmdPushConstants(cmd, _meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &constants);
+	vkCmdPushConstants(cmd, _renderObject[_selectedShader].material->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &constants);
 	//we can now draw
 	vkCmdDraw(cmd, _renderObject[_selectedShader].mesh->_vertices.size(), 1, 0, 0);
 

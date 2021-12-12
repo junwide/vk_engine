@@ -414,6 +414,91 @@ namespace vkinit {
 		}
 		return VK_SUCCESS;
 	}
+
+	VkDescriptorSetLayoutBinding vkinit::descriptor_setlayout_binding(
+		uint32_t              binding,
+		VkDescriptorType      descriptorType,
+		uint32_t              descriptorCount,
+		VkShaderStageFlags    stageFlags
+	)
+	{
+		VkDescriptorSetLayoutBinding camBufferBinding = {};
+		camBufferBinding.binding = binding;
+		camBufferBinding.descriptorCount = descriptorCount;
+		camBufferBinding.descriptorType = descriptorType;
+		camBufferBinding.stageFlags = stageFlags;
+		return camBufferBinding;
+	}
+
+	VkDescriptorSetLayoutCreateInfo vkinit::descriptor_setlayout_info(
+		uint32_t   bindingCount,
+		VkDescriptorSetLayoutBinding& pBindings,
+		VkDescriptorSetLayoutCreateFlags  flags
+	)
+	{
+		VkDescriptorSetLayoutCreateInfo setInfo = {};
+		setInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		setInfo.pNext = nullptr;
+
+		//we are going to have 1 binding
+		setInfo.bindingCount = bindingCount;
+		//no flags
+		setInfo.flags = flags;
+		//point to the camera buffer binding
+		setInfo.pBindings = &pBindings;
+		return setInfo;
+	}
+
+	VkDescriptorPoolCreateInfo vkinit::descriptorpool_create_info(
+		uint32_t  maxSets,
+		VkDescriptorPoolSize* pPoolSizes,
+		uint32_t poolSizeCount,
+		VkDescriptorPoolCreateFlags    flags
+	)
+	{
+		VkDescriptorPoolCreateInfo pool_info = {};
+		pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		pool_info.flags = flags;
+		pool_info.maxSets = maxSets;
+		pool_info.poolSizeCount = poolSizeCount;
+		pool_info.pPoolSizes = pPoolSizes;
+
+		return pool_info;
+	}
+	VkDescriptorSetAllocateInfo vkinit::descriptorset_allocate_info(
+		VkDescriptorPool     descriptorPool,
+		uint32_t             descriptorSetCount,
+		VkDescriptorSetLayout& pSetLayouts
+	)
+	{
+		VkDescriptorSetAllocateInfo allocInfo = {};
+		allocInfo.pNext = nullptr;
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		//using the pool we just set
+		allocInfo.descriptorPool = descriptorPool;
+		//only 1 descriptor
+		allocInfo.descriptorSetCount = 1;
+		//using the global data layout
+		allocInfo.pSetLayouts = &pSetLayouts;
+
+		return allocInfo;
+	}
+
+	VkDescriptorBufferInfo vkinit::descriptor_buffer_info(
+		VkBuffer        buffer,
+		VkDeviceSize    offset,
+		VkDeviceSize    range
+	)
+	{
+		VkDescriptorBufferInfo binfo = {};
+		//it will be the camera buffer
+		binfo.buffer = buffer;
+		//at 0 offset
+		binfo.offset = offset;
+		//of the size of a camera data struct
+		binfo.range = range;
+		return binfo;
+	}
 }
 
 namespace file_box 
