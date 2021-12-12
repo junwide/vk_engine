@@ -10,6 +10,7 @@
 #include <deque>
 #include <glm/glm.hpp>
 #include <unordered_map>
+constexpr unsigned int FRAME_OVERLAP = 2;
 
 class PipelineBuilder {
 public:
@@ -69,6 +70,14 @@ struct movestatus
 	glm::mat4 transformMatrix = glm::mat4{ 1.0f };
 };
 
+struct FrameData {
+	VkSemaphore _presentSem, _renderSem;
+	VkFence _renderFence;
+
+	VkCommandPool _commandPool;
+	VkCommandBuffer _commandBuffer;
+};
+
 class VulkanEngine {
 public:
 
@@ -96,16 +105,18 @@ public:
 	AllocatedImage _depthImage;
 	VkFormat _depthFormat;
 
-	VkCommandPool _commandPool;
-	VkCommandBuffer _commandBuffer;
+	//VkCommandPool _commandPool;
+	//VkCommandBuffer _commandBuffer;
+	//VkSemaphore _presentSem, _renderSem;
+	//VkFence _renderFence;
+
+	FrameData _frames[FRAME_OVERLAP];
+
 	VkQueue _graphicsQueue;
 	uint32_t _graphicsQueueFamily;
 
 	VkRenderPass _renderPass;
 	std::vector<VkFramebuffer> _framebuffers;
-
-	VkSemaphore _presentSem, _renderSem;
-	VkFence _renderFence;
 
 	DeletionQueue _mainDeletionQueue;
 
@@ -124,7 +135,7 @@ public:
 	std::vector<RenderObject> _renderObject;
 	std::unordered_map<std::string, Mesh> _meshSet;
 	std::unordered_map<std::string, Material> _material;
-	struct movestatus _movestatus;
+	movestatus _movestatus;
 	//initializes everything in the engine
 	void init();
 
@@ -142,6 +153,7 @@ public:
 	Material* get_material(const std::string& name);
 	Mesh* getMesh(const std::string& name);
 	void draw_object(VkCommandBuffer cmd, RenderObject* first, int count);
+	FrameData& get_current_frame();
 	
 	// Math
 	glm::mat4 UpdateDate(int obj_indx);

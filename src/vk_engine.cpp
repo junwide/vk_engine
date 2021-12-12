@@ -95,15 +95,18 @@ void VulkanEngine::init_commands()
 {
 	VkCommandPoolCreateInfo commandPoolInfo = 
 		vkinit::command_pool_create_info(_graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-	VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_commandPool));
+	for (int i = 0; i < FRAME_OVERLAP; i++)
+	{
+		VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_frames[i]._commandPool));
 
-	VkCommandBufferAllocateInfo cmbAllocateInfo = 
-		vkinit::command_buffer_allocate_info(_commandPool, 1);
-	VK_CHECK(vkAllocateCommandBuffers(_device, &cmbAllocateInfo, &_commandBuffer));
+		VkCommandBufferAllocateInfo cmbAllocateInfo =
+			vkinit::command_buffer_allocate_info(_frames[i]._commandPool, 1);
+		VK_CHECK(vkAllocateCommandBuffers(_device, &cmbAllocateInfo, &_frames[i]._commandBuffer));
 
-	_mainDeletionQueue.push_function([=]() {
-		vkDestroyCommandPool(_device, _commandPool, nullptr);
-	});
+		_mainDeletionQueue.push_function([=]() {
+			vkDestroyCommandPool(_device, _frames[i]._commandPool, nullptr);
+			});
+	}
 }
 
 void VulkanEngine::init_default_renderpass()
@@ -190,20 +193,27 @@ void VulkanEngine::init_sync_struct()
 	//and 2 semaphores to syncronize rendering with swapchain
 	//we want the fence to start signalled so we can wait on it on the first frame
 	VkFenceCreateInfo fence_info = vkinit::fence_create_info(VK_FENCE_CREATE_SIGNALED_BIT);
-	VK_CHECK(vkCreateFence(_device, &fence_info, nullptr, &_renderFence));
-
-	_mainDeletionQueue.push_function([=]() {
-		vkDestroyFence(_device, _renderFence, nullptr);
-	});
-
 	VkSemaphoreCreateInfo sem_info = vkinit::semaphore_create_info();
-	VK_CHECK(vkCreateSemaphore(_device, &sem_info, nullptr, &_presentSem));
-	VK_CHECK(vkCreateSemaphore(_device, &sem_info, nullptr, &_renderSem));
+	
+	
 
-	_mainDeletionQueue.push_function([=]() {
-		vkDestroySemaphore(_device, _presentSem, nullptr);
-		vkDestroySemaphore(_device, _renderSem, nullptr);
-		});
+	for (int i = 0; i < FRAME_OVERLAP; i++)
+	{
+		VK_CHECK(vkCreateFence(_device, &fence_info, nullptr, &_frames[i]._renderFence));
+
+		_mainDeletionQueue.push_function([=]() {
+			vkDestroyFence(_device, _frames[i]._renderFence, nullptr);
+			});
+
+
+		VK_CHECK(vkCreateSemaphore(_device, &sem_info, nullptr, &_frames[i]._presentSem));
+		VK_CHECK(vkCreateSemaphore(_device, &sem_info, nullptr, &_frames[i]._renderSem));
+
+		_mainDeletionQueue.push_function([=]() {
+			vkDestroySemaphore(_device, _frames[i]._presentSem, nullptr);
+			vkDestroySemaphore(_device, _frames[i]._renderSem, nullptr);
+			});
+	}
 }
 
 bool VulkanEngine::load_shader_module(const char* filePath, VkShaderModule* outShaderModule)
@@ -459,19 +469,13 @@ void VulkanEngine::load_mesh()
 	}
 }
 
+FrameData& VulkanEngine::get_current_frame()
+{
+	return _frames[_frameNumber % FRAME_OVERLAP];
+}
+
 glm::mat4 VulkanEngine::UpdateDate(int obj_index)
 {
-	float cam_p[3] = { 0.f,0.f ,-2.f};
-	if (obj_index == 1)
-	{
-		cam_p[1] = -9.f;
-		cam_p[2] = -18.f;
-	}
-	if (obj_index > 1)
-	{
-		cam_p[1] = -9.f;
-		cam_p[2] = -220.f;
-	}
 	glm::vec3 camPos = _renderObject[_selectedShader].camPos + _movestatus.camPos;
 	_renderObject[_selectedShader].camPos = camPos;
 	_movestatus.camPos = { 0.f, 0.f, 0.f };
@@ -670,8 +674,8 @@ void VulkanEngine::init()
 void VulkanEngine::cleanup()
 {
 	if (_isInitialized) {
-
-		vkWaitForFences(_device, 1, &_renderFence, true, 1000000000);
+		--_frameNumber; // in draw call last it ++
+		vkWaitForFences(_device, 1, &get_current_frame()._renderFence, true, 1000000000);
 
 		_mainDeletionQueue.flush();
 
@@ -688,14 +692,15 @@ void VulkanEngine::cleanup()
 
 void VulkanEngine::draw()
 {
-	VK_CHECK(vkWaitForFences(_device, 1, &_renderFence, true, 1000000000));
-	VK_CHECK(vkResetFences(_device, 1, &_renderFence));
+	VK_CHECK(vkWaitForFences(_device, 1, &get_current_frame()._renderFence, true, 1000000000));
+	VK_CHECK(vkResetFences(_device, 1, &get_current_frame()._renderFence));
+	VK_CHECK(vkResetCommandBuffer(get_current_frame()._commandBuffer, 0));
 
-	uint32_t swapchainImageIndex;
-	VK_CHECK(vkAcquireNextImageKHR(_device, _swapchain, 1000000000, _presentSem, nullptr, &swapchainImageIndex));
-	VK_CHECK(vkResetCommandBuffer(_commandBuffer, 0));
+	uint32_t swapchainImageIndex; 
+	VK_CHECK(vkAcquireNextImageKHR(_device, _swapchain, 1000000000, get_current_frame()._presentSem, nullptr, &swapchainImageIndex));
+	
 
-	VkCommandBuffer cmd = _commandBuffer;
+	VkCommandBuffer cmd = get_current_frame()._commandBuffer;
 	VkCommandBufferBeginInfo cmd_info = vkinit::command_buffer_begin_info(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 	VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_info));  // buid the cmd buffer 
 
@@ -722,25 +727,16 @@ void VulkanEngine::draw()
 	//{
 	//	draw_object(cmd, _renderObject.data(), _renderObject.size());
 	//}
-	//else if (_selectedShader == 2)
-	//{
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipelines[_selectedShader]);
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipelines[_selectedShader]);
 
-		VkDeviceSize offset = 0; 
-		vkCmdBindVertexBuffers(cmd, 0, 1, &_renderObject[_selectedShader].mesh->_vertexBuffer._buffer, &offset);
-		MeshPushConstants constants;
-		constants.render_matrix = UpdateDate(_selectedShader);
-		//upload the matrix to the GPU via push constants
-		vkCmdPushConstants(cmd, _meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &constants);
-		//we can now draw
-		vkCmdDraw(cmd, _renderObject[_selectedShader].mesh->_vertices.size(), 1, 0, 0);
-	//}
-	//else{
-	//	//vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipelines[_selectedShader]);
-
-	//	vkCmdDraw(cmd, 3, 1, 0, 0);
-	//}
-	//
+	VkDeviceSize offset = 0; 
+	vkCmdBindVertexBuffers(cmd, 0, 1, &_renderObject[_selectedShader].mesh->_vertexBuffer._buffer, &offset);
+	MeshPushConstants constants;
+	constants.render_matrix = UpdateDate(_selectedShader);
+	//upload the matrix to the GPU via push constants
+	vkCmdPushConstants(cmd, _meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &constants);
+	//we can now draw
+	vkCmdDraw(cmd, _renderObject[_selectedShader].mesh->_vertices.size(), 1, 0, 0);
 
 	vkCmdEndRenderPass(cmd);
 	VK_CHECK(vkEndCommandBuffer(cmd));
@@ -750,15 +746,15 @@ void VulkanEngine::draw()
 	VkSubmitInfo submit_info = vkinit::submit_info(
 							&cmd,
 							&waitStage,
-							&_presentSem, 1,
-							&_renderSem, 1
+							&get_current_frame()._presentSem, 1,
+							&get_current_frame()._renderSem, 1
 							);
-	VK_CHECK(vkQueueSubmit(_graphicsQueue, 1, &submit_info, _renderFence)); //send to GPU
+	VK_CHECK(vkQueueSubmit(_graphicsQueue, 1, &submit_info, get_current_frame()._renderFence)); //send to GPU
 	
 	//Display
 	VkPresentInfoKHR presentInfo = vkinit::present_info(
 								&_swapchain, 1,
-								&_renderSem, 1,
+								&get_current_frame()._renderSem, 1,
 								&swapchainImageIndex
 								);
 	VK_CHECK(vkQueuePresentKHR(_graphicsQueue, &presentInfo));
