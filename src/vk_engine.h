@@ -76,6 +76,14 @@ struct GPUCameraData {
 	glm::mat4 viewproj;
 };
 
+struct GPUSenceData{
+	glm::vec4 fogColor;
+	glm::vec4 fogDistance;
+	glm::vec4 ambientColor;
+	glm::vec4 sunlightDiretion;
+	glm::vec4 sunlightColor;
+};
+
 struct FrameData {
 	VkSemaphore _presentSem, _renderSem;
 	VkFence _renderFence;
@@ -100,6 +108,7 @@ public:
 
 	VkInstance _instances;
 	VkPhysicalDevice _choseGPU;
+	VkPhysicalDeviceProperties _gpuProperties;
 	VkDevice _device;
 	VkSurfaceKHR _surface;
 	VkDebugUtilsMessengerEXT _debug_Message;
@@ -134,7 +143,9 @@ public:
 	VkDescriptorSetLayout _globalSetLayout;
 	VkDescriptorPool _descriptorPool;
 	
-	
+	// dynamic description set
+	GPUSenceData _senceParameters;
+	AllocatedBuffer _senneParameterBuffer;
 	// define you need pipeline
 	std::vector<RenderObject> _renderObject;
 	std::unordered_map<std::string, Mesh> _meshSet;
@@ -164,6 +175,7 @@ public:
 	void draw_object(VkCommandBuffer cmd, RenderObject* first, int count);
 	FrameData& get_current_frame();
 	
+	size_t pad_uniform_buffer_size(size_t originalSize);
 	// Math
 	void UpdateDate(int obj_indx);
 
