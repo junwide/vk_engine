@@ -161,8 +161,12 @@ namespace vkinit {
 		VkDeviceSize    range
 	);
 
-	//VkWriteDescriptorSet write_descriptor_set(
-	//);
+	VkWriteDescriptorSet write_descriptor_buffer(
+		VkDescriptorType type,
+		VkDescriptorSet dstSet,
+		VkDescriptorBufferInfo* bufferInfo,
+		uint32_t binding
+	);
 }
 
 namespace file_box {
