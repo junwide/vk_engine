@@ -76,6 +76,10 @@ struct GPUCameraData {
 	glm::mat4 viewproj;
 };
 
+struct GPUObjectData {
+	glm::mat4 modelMatrix;
+};
+
 struct GPUSenceData{
 	glm::vec4 fogColor;
 	glm::vec4 fogDistance;
@@ -92,7 +96,9 @@ struct FrameData {
 	VkCommandBuffer _commandBuffer;
 
 	AllocatedBuffer cameraBuffer;
+	AllocatedBuffer objectBuffer;
 	VkDescriptorSet globalDescriptor;
+	VkDescriptorSet objectDescriptor;
 };
 
 class VulkanEngine {
@@ -140,7 +146,9 @@ public:
 	std::vector<std::string> shader_name;
 
 	VkPipelineLayout _meshPipelineLayout;  // Temp var
+
 	VkDescriptorSetLayout _globalSetLayout;
+	VkDescriptorSetLayout _objectSetLayout;
 	VkDescriptorPool _descriptorPool;
 	
 	// dynamic description set
