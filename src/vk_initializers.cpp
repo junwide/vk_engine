@@ -427,6 +427,7 @@ namespace vkinit {
 		camBufferBinding.descriptorCount = descriptorCount;
 		camBufferBinding.descriptorType = descriptorType;
 		camBufferBinding.stageFlags = stageFlags;
+		camBufferBinding.pImmutableSamplers = nullptr;
 		return camBufferBinding;
 	}
 
