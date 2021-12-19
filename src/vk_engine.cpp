@@ -501,34 +501,35 @@ void VulkanEngine::UpdateDate(int obj_index)
 	camData.view = view;
 	
 	// Cam Data
-	void* data;
-	vmaMapMemory(_allocator, get_current_frame().cameraBuffer._allocation, &data);
-	memcpy(data, &camData, sizeof(GPUCameraData));
-	vmaUnmapMemory(_allocator, get_current_frame().cameraBuffer._allocation);
+	char* camdata;
+	int frameIndex = _frameNumber % FRAME_OVERLAP;
+
+	vmaMapMemory(_allocator, _all_allcated_buffer._cameraBuffer._allocation, (void**)&camdata);
+	camdata += pad_uniform_buffer_size(sizeof(GPUCameraData)) * frameIndex;
+	memcpy(camdata, &camData, sizeof(GPUCameraData));
+	vmaUnmapMemory(_allocator, _all_allcated_buffer._cameraBuffer._allocation);
 
 	// Scene Data
 	float framed = (_frameNumber / 120.f);
 	_senceParameters.ambientColor = { sin(framed),0,cos(framed),1 };
 
 	char* sceneData;
-	vmaMapMemory(_allocator, _senneParameterBuffer._allocation, (void**)&sceneData);
-	int frameIndex = _frameNumber % FRAME_OVERLAP;
+	vmaMapMemory(_allocator, _all_allcated_buffer._senneParameterBuffer._allocation, (void**)&sceneData);
+	//int frameIndex = _frameNumber % FRAME_OVERLAP;
 
 	sceneData += pad_uniform_buffer_size(sizeof(GPUSenceData)) * frameIndex;
 	memcpy(sceneData, &_senceParameters, sizeof(GPUSenceData));
-	vmaUnmapMemory(_allocator, _senneParameterBuffer._allocation);
+	vmaUnmapMemory(_allocator, _all_allcated_buffer._senneParameterBuffer._allocation);
 
 	//Object Data
 	void* objectData;
-	vmaMapMemory(_allocator, get_current_frame().objectBuffer._allocation, &objectData);
+	vmaMapMemory(_allocator, _all_allcated_buffer._objectBuffer._allocation, &objectData);
 	GPUObjectData* objectSSBO = (GPUObjectData*)objectData;
 
-	//for (int i = 0; i < 1000; i++)
-	//{
-		RenderObject& object = _renderObject[_selectedShader];
-		objectSSBO[0].modelMatrix = object.transformMatrix;
-	//}
-	vmaUnmapMemory(_allocator, get_current_frame().objectBuffer._allocation);
+	RenderObject& object = _renderObject[_selectedShader];
+	objectSSBO[frameIndex].modelMatrix = object.transformMatrix;
+
+	vmaUnmapMemory(_allocator, _all_allcated_buffer._objectBuffer._allocation);
 
 	return;
 }
@@ -607,7 +608,7 @@ void VulkanEngine::draw_object(VkCommandBuffer cmd, RenderObject* first, int cou
 
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
 							_renderObject[_selectedShader].material->pipelineLayout, 0, 1, 
-							&get_current_frame().globalDescriptor, 1, &uniform_offset);
+							&_globalDescriptor, 1, &uniform_offset);
 
 	VkDeviceSize offset = 0;
 	vkCmdBindVertexBuffers(cmd, 0, 1, &_renderObject[_selectedShader].mesh->_vertexBuffer._buffer, &offset);
@@ -699,14 +700,13 @@ void VulkanEngine::init_descriptors()
 														1, VK_SHADER_STAGE_VERTEX_BIT
 														);
 
-	VkDescriptorSetLayoutBinding bindings[] = { camBufferBinding,senceBufferBinding, objectBufferBinding};
+	VkDescriptorSetLayoutBinding bindings[] = { camBufferBinding, senceBufferBinding, objectBufferBinding};
 	VkDescriptorSetLayoutCreateInfo setInfo = vkinit::descriptor_setlayout_info(3, bindings[0]);
 	//setInfo.pBindings = bindings;
 	VK_CHECK(vkCreateDescriptorSetLayout(_device, &setInfo, nullptr, &_globalSetLayout));
 	
 	_mainDeletionQueue.push_function([=]() {
 		vkDestroyDescriptorSetLayout(_device, _globalSetLayout, nullptr);
-		//vkDestroyDescriptorSetLayout(_device, _objectSetLayout, nullptr);
 		});
 
 	VkDescriptorPoolCreateInfo pool_info = vkinit::descriptorpool_create_info(10, sizes.data(), sizes.size() );
@@ -717,55 +717,63 @@ void VulkanEngine::init_descriptors()
 		});
 
 
-	const size_t sceneParamBufferSize = FRAME_OVERLAP * pad_uniform_buffer_size(sizeof(GPUSenceData));
-	_senneParameterBuffer = create_buffer(sceneParamBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	size_t ParamBufferSize = FRAME_OVERLAP * pad_uniform_buffer_size(sizeof(GPUSenceData));
+	_all_allcated_buffer._senneParameterBuffer = create_buffer(
+													ParamBufferSize, 
+													VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, 
+													VMA_MEMORY_USAGE_CPU_TO_GPU
+												);
+	
+	ParamBufferSize = FRAME_OVERLAP * pad_uniform_buffer_size(sizeof(GPUCameraData));
+	_all_allcated_buffer._cameraBuffer = create_buffer(
+											ParamBufferSize, 
+											VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, 
+											VMA_MEMORY_USAGE_CPU_TO_GPU
+										);
+
+	ParamBufferSize = FRAME_OVERLAP * pad_uniform_buffer_size(sizeof(GPUObjectData));
+	_all_allcated_buffer._objectBuffer = create_buffer(
+											ParamBufferSize,
+											VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+											VMA_MEMORY_USAGE_CPU_TO_GPU
+										);
+
+	VkDescriptorSetAllocateInfo allocInfo = vkinit::descriptorset_allocate_info(_descriptorPool, 1, _globalSetLayout);
+	VK_CHECK(vkAllocateDescriptorSets(_device, &allocInfo, &_globalDescriptor));
 
 	for (int i = 0; i < FRAME_OVERLAP; i++)
 	{
-		_frames[i].cameraBuffer = create_buffer(
-									sizeof(GPUCameraData),
-									VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-									VMA_MEMORY_USAGE_CPU_TO_GPU
-									);
-		_frames[i].objectBuffer = create_buffer(
-									sizeof(GPUObjectData) * 1000, 
-									VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 
-									VMA_MEMORY_USAGE_CPU_TO_GPU
-									);
-
-		VkDescriptorSetAllocateInfo allocInfo = vkinit::descriptorset_allocate_info(_descriptorPool, 1, _globalSetLayout);
-		VK_CHECK(vkAllocateDescriptorSets(_device, &allocInfo, &_frames[i].globalDescriptor));
 
 		VkDescriptorBufferInfo cam_info = vkinit::descriptor_buffer_info(
-												_frames[i].cameraBuffer._buffer, 
-												0, sizeof(GPUCameraData)
-												);
+											_all_allcated_buffer._cameraBuffer._buffer,
+											i, sizeof(GPUCameraData)
+											);
 		VkDescriptorBufferInfo sence_info = vkinit::descriptor_buffer_info(
-											_senneParameterBuffer._buffer,
+											_all_allcated_buffer._senneParameterBuffer._buffer,
 											0, sizeof(GPUSenceData)
 											);
 		VkDescriptorBufferInfo object_info = vkinit::descriptor_buffer_info(
-											_frames[i].objectBuffer._buffer,
-											0, sizeof(GPUObjectData)
+											_all_allcated_buffer._objectBuffer._buffer,
+											i, sizeof(GPUObjectData)
 											);
 
 		VkWriteDescriptorSet cameraWrite = vkinit::write_descriptor_buffer(
 											VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 
-											_frames[i].globalDescriptor, 
+											_globalDescriptor, 
 											&cam_info, 
 											0
 											);
 		
 		VkWriteDescriptorSet senceWrite = vkinit::write_descriptor_buffer(
 											VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-											_frames[i].globalDescriptor,
+											_globalDescriptor,
 											&sence_info,
 											1
 											);
 
 		VkWriteDescriptorSet objectWrite = vkinit::write_descriptor_buffer(
 											VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-											_frames[i].globalDescriptor,
+											_globalDescriptor,
 											&object_info,
 											2
 											);

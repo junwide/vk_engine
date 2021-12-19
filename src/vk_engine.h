@@ -95,10 +95,15 @@ struct FrameData {
 	VkCommandPool _commandPool;
 	VkCommandBuffer _commandBuffer;
 
-	AllocatedBuffer cameraBuffer;
-	AllocatedBuffer objectBuffer;
-	VkDescriptorSet globalDescriptor;
 };
+
+struct AllFrameAllocatedBuffer
+{
+	AllocatedBuffer _cameraBuffer;
+	AllocatedBuffer _objectBuffer;
+	AllocatedBuffer _senneParameterBuffer;
+};
+
 
 class VulkanEngine {
 public:
@@ -147,9 +152,13 @@ public:
 	VkPipelineLayout _meshPipelineLayout;  // Temp var
 
 	VkDescriptorSetLayout _globalSetLayout;
-	//VkDescriptorSetLayout _objectSetLayout; // De
 	VkDescriptorPool _descriptorPool;
 	
+
+	//
+	VkDescriptorSet _globalDescriptor;
+	// all use same description set
+	AllFrameAllocatedBuffer _all_allcated_buffer;
 	// dynamic description set
 	GPUSenceData _senceParameters;
 	AllocatedBuffer _senneParameterBuffer;
