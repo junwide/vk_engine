@@ -98,7 +98,6 @@ struct FrameData {
 	AllocatedBuffer cameraBuffer;
 	AllocatedBuffer objectBuffer;
 	VkDescriptorSet globalDescriptor;
-	VkDescriptorSet objectDescriptor;
 };
 
 class VulkanEngine {
@@ -148,7 +147,7 @@ public:
 	VkPipelineLayout _meshPipelineLayout;  // Temp var
 
 	VkDescriptorSetLayout _globalSetLayout;
-	VkDescriptorSetLayout _objectSetLayout;
+	//VkDescriptorSetLayout _objectSetLayout; // De
 	VkDescriptorPool _descriptorPool;
 	
 	// dynamic description set

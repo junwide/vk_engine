@@ -311,9 +311,9 @@ void VulkanEngine::init_pipelines()
 	mesh_pipeline_layout_info.pushConstantRangeCount = 1;
 	mesh_pipeline_layout_info.pPushConstantRanges = &push_constant[0];
 
-	VkDescriptorSetLayout setLayouts[] = { _globalSetLayout, _objectSetLayout };
+	VkDescriptorSetLayout setLayouts[] = { _globalSetLayout };
 	mesh_pipeline_layout_info.pSetLayouts = setLayouts;
-	mesh_pipeline_layout_info.setLayoutCount = 2;
+	mesh_pipeline_layout_info.setLayoutCount = 1;
 	VK_CHECK(vkCreatePipelineLayout(_device, &mesh_pipeline_layout_info, nullptr, &_meshPipelineLayout));
 
 	PipelineBuilder pipelineBuilder;
@@ -604,8 +604,11 @@ void VulkanEngine::draw_object(VkCommandBuffer cmd, RenderObject* first, int cou
 	uint32_t uniform_offset = pad_uniform_buffer_size(sizeof(GPUSenceData)) * (_frameNumber % FRAME_OVERLAP);
 
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _renderObject[_selectedShader].material->pipeline);
-	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _renderObject[_selectedShader].material->pipelineLayout, 0, 1, &get_current_frame().globalDescriptor, 1, &uniform_offset);
-	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _renderObject[_selectedShader].material->pipelineLayout, 1, 1, &get_current_frame().objectDescriptor, 0, nullptr);
+
+	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+							_renderObject[_selectedShader].material->pipelineLayout, 0, 1, 
+							&get_current_frame().globalDescriptor, 1, &uniform_offset);
+
 	VkDeviceSize offset = 0;
 	vkCmdBindVertexBuffers(cmd, 0, 1, &_renderObject[_selectedShader].mesh->_vertexBuffer._buffer, &offset);
 	MeshPushConstants constants;
@@ -692,20 +695,18 @@ void VulkanEngine::init_descriptors()
 														);
 
 	VkDescriptorSetLayoutBinding objectBufferBinding = vkinit::descriptor_setlayout_binding(
-														0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+														2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 														1, VK_SHADER_STAGE_VERTEX_BIT
 														);
 
-	VkDescriptorSetLayoutBinding bindings[] = { camBufferBinding,senceBufferBinding };
-	VkDescriptorSetLayoutCreateInfo setInfo = vkinit::descriptor_setlayout_info(2, bindings[0]);
+	VkDescriptorSetLayoutBinding bindings[] = { camBufferBinding,senceBufferBinding, objectBufferBinding};
+	VkDescriptorSetLayoutCreateInfo setInfo = vkinit::descriptor_setlayout_info(3, bindings[0]);
 	//setInfo.pBindings = bindings;
 	VK_CHECK(vkCreateDescriptorSetLayout(_device, &setInfo, nullptr, &_globalSetLayout));
-	VkDescriptorSetLayoutCreateInfo set2Info = vkinit::descriptor_setlayout_info(1, objectBufferBinding);
-	VK_CHECK(vkCreateDescriptorSetLayout(_device, &set2Info, nullptr, &_objectSetLayout));
 	
 	_mainDeletionQueue.push_function([=]() {
 		vkDestroyDescriptorSetLayout(_device, _globalSetLayout, nullptr);
-		vkDestroyDescriptorSetLayout(_device, _objectSetLayout, nullptr);
+		//vkDestroyDescriptorSetLayout(_device, _objectSetLayout, nullptr);
 		});
 
 	VkDescriptorPoolCreateInfo pool_info = vkinit::descriptorpool_create_info(10, sizes.data(), sizes.size() );
@@ -734,12 +735,6 @@ void VulkanEngine::init_descriptors()
 
 		VkDescriptorSetAllocateInfo allocInfo = vkinit::descriptorset_allocate_info(_descriptorPool, 1, _globalSetLayout);
 		VK_CHECK(vkAllocateDescriptorSets(_device, &allocInfo, &_frames[i].globalDescriptor));
-
-		VkDescriptorSetAllocateInfo objectSetInfo = vkinit::descriptorset_allocate_info(_descriptorPool, 1, _objectSetLayout);
-		VK_CHECK(vkAllocateDescriptorSets(_device, &objectSetInfo, &_frames[i].objectDescriptor));
-		//_mainDeletionQueue.push_function([=]() {
-		//	vkFreeDescriptorSets(_device, _descriptorPool, 1, &_frames[i].globalDescriptor);
-		//});
 
 		VkDescriptorBufferInfo cam_info = vkinit::descriptor_buffer_info(
 												_frames[i].cameraBuffer._buffer, 
@@ -770,9 +765,9 @@ void VulkanEngine::init_descriptors()
 
 		VkWriteDescriptorSet objectWrite = vkinit::write_descriptor_buffer(
 											VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-											_frames[i].objectDescriptor,
+											_frames[i].globalDescriptor,
 											&object_info,
-											0
+											2
 											);
 
 		VkWriteDescriptorSet setWrites[] = { cameraWrite, senceWrite, objectWrite };
