@@ -88,6 +88,11 @@ struct GPUSenceData{
 	glm::vec4 sunlightColor;
 };
 
+struct UploadContext {
+	VkFence _uploadFence;
+	VkCommandPool _commandPool;
+};
+
 struct FrameData {
 	VkSemaphore _presentSem, _renderSem;
 	VkFence _renderFence;
@@ -154,8 +159,9 @@ public:
 	VkDescriptorSetLayout _globalSetLayout;
 	VkDescriptorPool _descriptorPool;
 	
+	UploadContext _uploadContext;
 
-	//
+	// All Frame use same Descriptor
 	VkDescriptorSet _globalDescriptor;
 	// all use same description set
 	AllFrameAllocatedBuffer _all_allcated_buffer;
@@ -185,6 +191,7 @@ public:
 		VmaMemoryUsage memoryUsage
 	);
 	// Mesh Part
+	void immediate_submit(std::function<void(VkCommandBuffer cmd)>&& function);
 	Material* create_material(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name);
 	Material* get_material(const std::string& name);
 	Mesh* getMesh(const std::string& name);
