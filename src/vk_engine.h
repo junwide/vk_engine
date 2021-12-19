@@ -88,6 +88,11 @@ struct GPUSenceData{
 	glm::vec4 sunlightColor;
 };
 
+struct UploadContext {
+	VkFence _uploadFence;
+	VkCommandPool _commandPool;
+};
+
 struct FrameData {
 	VkSemaphore _presentSem, _renderSem;
 	VkFence _renderFence;
@@ -95,10 +100,15 @@ struct FrameData {
 	VkCommandPool _commandPool;
 	VkCommandBuffer _commandBuffer;
 
-	AllocatedBuffer cameraBuffer;
-	AllocatedBuffer objectBuffer;
-	VkDescriptorSet globalDescriptor;
 };
+
+struct AllFrameAllocatedBuffer
+{
+	AllocatedBuffer _cameraBuffer;
+	AllocatedBuffer _objectBuffer;
+	AllocatedBuffer _senneParameterBuffer;
+};
+
 
 class VulkanEngine {
 public:
@@ -147,9 +157,14 @@ public:
 	VkPipelineLayout _meshPipelineLayout;  // Temp var
 
 	VkDescriptorSetLayout _globalSetLayout;
-	//VkDescriptorSetLayout _objectSetLayout; // De
 	VkDescriptorPool _descriptorPool;
 	
+	UploadContext _uploadContext;
+
+	// All Frame use same Descriptor
+	VkDescriptorSet _globalDescriptor;
+	// all use same description set
+	AllFrameAllocatedBuffer _all_allcated_buffer;
 	// dynamic description set
 	GPUSenceData _senceParameters;
 	AllocatedBuffer _senneParameterBuffer;
@@ -176,6 +191,7 @@ public:
 		VmaMemoryUsage memoryUsage
 	);
 	// Mesh Part
+	void immediate_submit(std::function<void(VkCommandBuffer cmd)>&& function);
 	Material* create_material(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name);
 	Material* get_material(const std::string& name);
 	Mesh* getMesh(const std::string& name);

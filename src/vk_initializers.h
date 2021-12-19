@@ -35,11 +35,11 @@ namespace vkinit {
 
 	VkSubmitInfo submit_info(
 		VkCommandBuffer* cmd,
-		VkPipelineStageFlags* waitFlag,
-		const VkSemaphore* waitSemphore,
-		uint32_t wait_count,
-		const VkSemaphore* signalSemphore,
-		uint32_t sgnal_count
+		VkPipelineStageFlags* waitFlag = nullptr,
+		const VkSemaphore* waitSemphore = nullptr,
+		uint32_t wait_count = 0,
+		const VkSemaphore* signalSemphore = nullptr,
+		uint32_t sgnal_count = 0
 		);
 
 	VkPresentInfoKHR present_info(
