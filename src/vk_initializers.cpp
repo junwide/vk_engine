@@ -4,6 +4,8 @@
 #include <writer.h>
 #include <stringbuffer.h>
 #include <sstream>
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
 namespace vkinit {
 	VkCommandPoolCreateInfo vkinit::command_pool_create_info
 	(uint32_t queueFamilyIndex,
@@ -393,6 +395,7 @@ namespace vkinit {
 		std::vector<std::string>& shader_name,
 		std::vector<uint16_t>& shader_index,
 		std::vector<std::string>& obj_name,
+		std::vector<std::string>& texture_name,
 		rapidjson::Document &object
 	)
 	{
@@ -401,6 +404,13 @@ namespace vkinit {
 			for (rapidjson::SizeType i = 0 ; i < shader_set.Size(); i++)
 			{
 				shader_name.push_back(shader_set[i]["name"].GetString());
+			}
+		}
+		{
+			const rapidjson::Value& texture_set = object["texture"];
+			for (rapidjson::SizeType i = 0; i < texture_set.Size(); i++)
+			{
+				texture_name.push_back(texture_set[i]["name"].GetString());
 			}
 		}
 		{
@@ -543,4 +553,117 @@ namespace file_box
 		object.Parse(string_buffer.str().c_str());
 		return VK_SUCCESS;
 	}
+
+	VkResult load_image_from_file(VulkanEngine& engine, const char* file, AllocatedImage& outImage)
+	{
+		int texWidth, texHeight, texChannels;
+
+		stbi_uc* pixels = stbi_load(file, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+
+		if (!pixels) {
+			return VK_ERROR_UNKNOWN;
+		}
+		
+		void* pixel_ptr = pixels;
+		VkDeviceSize imageSize = texWidth * texHeight * 4;
+		VkFormat image_format = VK_FORMAT_R8G8B8A8_SRGB;
+		AllocatedBuffer stagingbuffer = engine.create_buffer(
+												imageSize, 
+												VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
+												VMA_MEMORY_USAGE_CPU_ONLY);
+
+		void* data;
+		vmaMapMemory(engine._allocator, stagingbuffer._allocation, &data);
+		memcpy(data, pixel_ptr, static_cast<size_t>(imageSize));
+		vmaUnmapMemory(engine._allocator, stagingbuffer._allocation);
+
+		VkExtent3D imageExent;
+		imageExent.width = texWidth;
+		imageExent.height = texHeight;
+		imageExent.depth = 1;
+
+		VkImageCreateInfo dimg_info = vkinit::image_create_info(
+										image_format, 
+										VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 
+										imageExent);
+
+		AllocatedImage newImage;
+		VmaAllocationCreateInfo dimg_allocinfo = {};
+		dimg_allocinfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+		vmaCreateImage(engine._allocator, &dimg_info, &dimg_allocinfo, &newImage._image, &newImage._allocation, nullptr);
+
+		engine.immediate_submit([&](VkCommandBuffer cmd) {
+			VkImageSubresourceRange range;
+			range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			range.baseMipLevel = 0;
+			range.levelCount = 1;
+			range.baseArrayLayer = 0;
+			range.layerCount = 1;
+
+			VkImageMemoryBarrier imageBarrier_toTransfer = {};
+			imageBarrier_toTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+
+			imageBarrier_toTransfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			imageBarrier_toTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			imageBarrier_toTransfer.image = newImage._image;
+			imageBarrier_toTransfer.subresourceRange = range;
+
+			imageBarrier_toTransfer.srcAccessMask = 0;
+			imageBarrier_toTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+			//barrier the image into the transfer-receive layout
+			vkCmdPipelineBarrier(
+				cmd, 
+				VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 
+				VK_PIPELINE_STAGE_TRANSFER_BIT, 
+				0, 0, nullptr, 0, 
+				nullptr, 1, 
+				&imageBarrier_toTransfer
+				);
+
+			VkBufferImageCopy copyRegion = {};
+			copyRegion.bufferOffset = 0;
+			copyRegion.bufferRowLength = 0;
+			copyRegion.bufferImageHeight = 0;
+
+			copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			copyRegion.imageSubresource.mipLevel = 0;
+			copyRegion.imageSubresource.baseArrayLayer = 0;
+			copyRegion.imageSubresource.layerCount = 1;
+			copyRegion.imageExtent = imageExent;
+
+			vkCmdCopyBufferToImage(
+				cmd, 
+				stagingbuffer._buffer, 
+				newImage._image, 
+				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 
+				&copyRegion
+			);
+			VkImageMemoryBarrier imageBarrier_toReadable = imageBarrier_toTransfer;
+
+			imageBarrier_toReadable.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			imageBarrier_toReadable.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+			imageBarrier_toReadable.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			imageBarrier_toReadable.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+			//barrier the image into the shader readable layout
+			vkCmdPipelineBarrier(
+				cmd, 
+				VK_PIPELINE_STAGE_TRANSFER_BIT, 
+				VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
+				0, 0, nullptr, 0, 
+				nullptr, 1, 
+				&imageBarrier_toReadable
+			);
+		});
+
+		engine._mainDeletionQueue.push_function([=]() {
+			vmaDestroyImage(engine._allocator, newImage._image, newImage._allocation);
+			});
+		outImage = newImage;
+
+		return VK_SUCCESS;
+	}
+
 }

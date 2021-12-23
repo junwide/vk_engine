@@ -109,6 +109,11 @@ struct AllFrameAllocatedBuffer
 	AllocatedBuffer _senneParameterBuffer;
 };
 
+struct Texture {
+	AllocatedImage image;
+	VkImageView imageView;
+};
+
 
 class VulkanEngine {
 public:
@@ -153,6 +158,7 @@ public:
 	std::vector<uint16_t> shader_index;
 	std::vector<std::string> obj_name;
 	std::vector<std::string> shader_name;
+	std::vector<std::string> texture_name;
 
 	VkPipelineLayout _meshPipelineLayout;  // Temp var
 
@@ -172,6 +178,7 @@ public:
 	std::vector<RenderObject> _renderObject;
 	std::unordered_map<std::string, Mesh> _meshSet;
 	std::unordered_map<std::string, Material> _material;
+	std::unordered_map<std::string, Texture> _loadedTextures;
 	movestatus _movestatus;
 	//initializes everything in the engine
 	void init();
@@ -216,6 +223,7 @@ private:
 	bool shader_perpare(PipelineBuilder* pipelineBuilder);
 
 	void load_mesh();
+	void load_images();
 	void upload_mesh(Mesh& mesh);
 	void key_event_process(int32_t keycode);
 	void init_descriptors();

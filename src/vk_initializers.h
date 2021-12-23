@@ -126,6 +126,7 @@ namespace vkinit {
 		std::vector<std::string>& shader_name,
 		std::vector<uint16_t> &shader_index,
 		std::vector<std::string> &obj_name,
+		std::vector<std::string>& texture_name,
 		rapidjson::Document &object
 	);
 
@@ -175,6 +176,7 @@ namespace file_box {
 					const std::string file_name, 
 					const std::string file_path = "../../json/");
 
+	VkResult load_image_from_file(VulkanEngine& engine, const char* file, AllocatedImage& outImage);
 
 }
 
