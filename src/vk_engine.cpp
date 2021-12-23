@@ -67,7 +67,7 @@ void VulkanEngine::init_vulkan()
 	// Test;
 	rapidjson::Document object_json;
 	VK_CHECK(file_box::readfile(object_json, "shader_config.json"));
-	vkinit::shadername_get(shader_name, shader_index, obj_name, object_json);
+	vkinit::shadername_get(shader_name, shader_index, obj_name, texture_name, object_json);
 }
 
 void VulkanEngine::init_swapchain()
@@ -521,6 +521,27 @@ void VulkanEngine::upload_mesh(Mesh& mesh)
 	vmaDestroyBuffer(_allocator, stagingBuffer._buffer, stagingBuffer._allocation);
 }
 
+void VulkanEngine::load_images()
+{
+	Texture texture_object;
+	for (string textureName : texture_name)
+	{
+		string Path = "../../assets/" + textureName;
+		file_box::load_image_from_file(*this, Path.c_str(), texture_object.image);
+		VkImageViewCreateInfo imageinfo = vkinit::imageview_create_info(
+											VK_FORMAT_R8G8B8A8_SRGB, 
+											texture_object.image._image, 
+											VK_IMAGE_ASPECT_COLOR_BIT
+											);
+		vkCreateImageView(_device, &imageinfo, nullptr, &texture_object.imageView);
+		_mainDeletionQueue.push_function([=]() {
+			vkDestroyImageView(_device, texture_object.imageView, nullptr);
+		});
+		_loadedTextures[textureName] = texture_object;
+	}
+
+}
+
 void VulkanEngine::load_mesh()
 {
 	////make the array 3 vertices long
@@ -945,6 +966,8 @@ void VulkanEngine::init()
 
 	init_pipelines();
 	//everything went fine
+	load_images();
+
 	load_mesh();
 
 	init_scene();

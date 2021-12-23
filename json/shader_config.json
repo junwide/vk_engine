@@ -2,7 +2,11 @@
     "shader":[
 		{"name":"colored_triangle.vert.spv"},
 		{"name":"colored_triangle.frag.spv"},
-		{"name":"tri_mesh.vert.spv"}
+		{"name":"tri_mesh.vert.spv"},
+        {"name":"textured_lit.frag.spv"}
+    ],
+    "texture":[
+        {"name":"lost_empire-RGBA.png"}
     ],
     "object":[
         {
@@ -19,6 +23,11 @@
             "Mode_name": "Full_Piece.obj",
             "Vertex_shader": 2,
             "Fragment_shader": 1
+        },
+        {
+            "Mode_name": "lost_empire.obj",
+            "Vertex_shader": 2,
+            "Fragment_shader": 3
         }
     ]
 }
