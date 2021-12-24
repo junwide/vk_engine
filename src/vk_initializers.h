@@ -168,6 +168,18 @@ namespace vkinit {
 		VkDescriptorBufferInfo* bufferInfo,
 		uint32_t binding
 	);
+
+	VkSamplerCreateInfo sampler_create_info(
+		VkFilter filters, 
+		VkSamplerAddressMode samplerAddressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT
+	);
+
+	VkWriteDescriptorSet write_descriptor_image(
+		VkDescriptorType type, 
+		VkDescriptorSet dstSet, 
+		VkDescriptorImageInfo* imageInfo, 
+		uint32_t binding
+	);
 }
 
 namespace file_box {

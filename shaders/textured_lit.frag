@@ -14,7 +14,12 @@ layout(set = 0, binding = 1) uniform  SceneData{
 	vec4 sunlightDirection; //w for sun power
 	vec4 sunlightColor;
 } sceneData;
+
+layout(set = 1, binding = 0) uniform sampler2D tex1;
+
+
 void main()
 {
-	outFragColor = vec4(texCoord.x,texCoord.y,0.5f,1.0f);
+	vec3 color = texture(tex1,texCoord).xyz;
+	outFragColor = vec4(color,1.0f);
 }
