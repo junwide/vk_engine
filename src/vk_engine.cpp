@@ -276,8 +276,15 @@ bool VulkanEngine::shader_perpare(PipelineBuilder* pipelineBuilder)
 		pipelineBuilder->_vertexInputInfo.vertexAttributeDescriptionCount = vertexDescription.attributes.size();
 		pipelineBuilder->_vertexInputInfo.pVertexBindingDescriptions = vertexDescription.bindings.data();
 		pipelineBuilder->_vertexInputInfo.vertexBindingDescriptionCount = vertexDescription.bindings.size();
-
-		pipelineBuilder->_pipelineLayout = _meshPipelineLayout;
+		
+		if (i < 6)
+		{
+			pipelineBuilder->_pipelineLayout = _meshPipelineLayout;
+		}
+		else
+		{
+			pipelineBuilder->_pipelineLayout = _texturedPipeLayout;
+		}
 		
 		if (!load_shader_module(pathfile.c_str(), &targetShader[i]))
 		{
@@ -296,7 +303,12 @@ bool VulkanEngine::shader_perpare(PipelineBuilder* pipelineBuilder)
 		if (flag_build){
 			pipelineBuilder->_depthStencil = vkinit::depth_stencil_create_info(true, true, VK_COMPARE_OP_LESS_OR_EQUAL);
 			_trianglePipelines = pipelineBuilder->build_pipline(_device, _renderPass);
-			create_material(_trianglePipelines, _meshPipelineLayout, "defaultmesh");
+			if (i == 7)
+			{
+				create_material(_trianglePipelines, _texturedPipeLayout, "texturedmesh");
+			}
+			else
+				create_material(_trianglePipelines, _meshPipelineLayout, "defaultmesh");
 			pipelineBuilder->_shaderStages.clear();
 
 			_mainDeletionQueue.push_function([=]() {
@@ -329,6 +341,12 @@ void VulkanEngine::init_pipelines()
 	mesh_pipeline_layout_info.setLayoutCount = 1;
 	VK_CHECK(vkCreatePipelineLayout(_device, &mesh_pipeline_layout_info, nullptr, &_meshPipelineLayout));
 
+	VkPipelineLayoutCreateInfo textured_pipeline_layout_info = mesh_pipeline_layout_info;
+	VkDescriptorSetLayout set2Layouts[] = { _globalSetLayout, _singleTextureSetLayout };
+	textured_pipeline_layout_info.pSetLayouts = set2Layouts;
+	textured_pipeline_layout_info.setLayoutCount = 2;
+	VK_CHECK(vkCreatePipelineLayout(_device, &textured_pipeline_layout_info, nullptr, &_texturedPipeLayout));
+
 	PipelineBuilder pipelineBuilder;
 	pipelineBuilder._vertexInputInfo = vkinit::vertex_input_state_create_info();
 	pipelineBuilder._inputAssmbly = vkinit::input_assembly_create_info(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
@@ -349,6 +367,7 @@ void VulkanEngine::init_pipelines()
 	
 	_mainDeletionQueue.push_function([=]() {
 		vkDestroyPipelineLayout(_device, _meshPipelineLayout, nullptr);
+		vkDestroyPipelineLayout(_device, _texturedPipeLayout, nullptr);
 		});
 
 }
@@ -701,8 +720,13 @@ void VulkanEngine::draw_object(VkCommandBuffer cmd, RenderObject* first, int cou
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _renderObject[_selectedShader].material->pipeline);
 
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-							_renderObject[_selectedShader].material->pipelineLayout, 0, 1, 
-							&_globalDescriptor, 1, &uniform_offset);
+		_renderObject[_selectedShader].material->pipelineLayout, 0, 1,
+		&_globalDescriptor, 1, &uniform_offset);
+
+	if (_selectedShader == 3) {
+		//texture descriptor
+		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _renderObject[_selectedShader].material->pipelineLayout, 1, 1, &_renderObject[_selectedShader].material->textureSet, 0, nullptr);
+	}
 
 	VkDeviceSize offset = 0;
 	vkCmdBindVertexBuffers(cmd, 0, 1, &_renderObject[_selectedShader].mesh->_vertexBuffer._buffer, &offset);
@@ -721,7 +745,14 @@ void VulkanEngine::init_scene()
 	{
 		RenderObject mesh_obj;
 		mesh_obj.mesh = getMesh(name);
-		mesh_obj.material = get_material("defaultmesh");
+		if (name == "lost_empire.obj")
+		{
+			mesh_obj.material = get_material("texturedmesh");
+		}
+		else
+		{
+			mesh_obj.material = get_material("defaultmesh");
+		}
 		mesh_obj.transformMatrix = glm::mat4{ 1.0f };
 		mesh_obj.camPos = { 0.f,0.f ,-2.f };
 		_renderObject.push_back(mesh_obj);
@@ -740,7 +771,37 @@ void VulkanEngine::init_scene()
 	//		_renderObject.push_back(tri);
 	//	}
 	//}
+
+		//create a sampler for the texture
+	VkSamplerCreateInfo samplerInfo = vkinit::sampler_create_info(VK_FILTER_NEAREST);
+	VkSampler blockySampler;
+	vkCreateSampler(_device, &samplerInfo, nullptr, &blockySampler);
+
+	Material* texturedMat = get_material("texturedmesh");
+
+	//allocate the descriptor set for single-texture to use on the material
+	VkDescriptorSetAllocateInfo allocInfo = vkinit::descriptorset_allocate_info(_descriptorPool, 1, _singleTextureSetLayout);
+	VK_CHECK(vkAllocateDescriptorSets(_device, &allocInfo, &texturedMat->textureSet));
+
+	//write to the descriptor set so that it points to our empire_diffuse texture
+	VkDescriptorImageInfo imageBufferInfo;
+	imageBufferInfo.sampler = blockySampler;
+	imageBufferInfo.imageView = _loadedTextures["lost_empire-RGBA.png"].imageView;
+	imageBufferInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+	VkWriteDescriptorSet texture1 = vkinit::write_descriptor_image(
+										VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 
+										texturedMat->textureSet, 
+										&imageBufferInfo, 0
+									);
+
+	vkUpdateDescriptorSets(_device, 1, &texture1, 0, nullptr);
+
+	_mainDeletionQueue.push_function([=]() {
+		vkDestroySampler(_device, blockySampler, nullptr);
+		});
 }
+
 AllocatedBuffer VulkanEngine::create_buffer(
 	size_t allocSize,
 	VkBufferUsageFlags usage,
@@ -776,7 +837,8 @@ void VulkanEngine::init_descriptors()
 	{
 		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10 },
 		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 10 },
-		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10}
+		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10},
+		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10}
 	};
 	//information about the binding.
 	VkDescriptorSetLayoutBinding camBufferBinding = vkinit::descriptor_setlayout_binding(
@@ -794,13 +856,25 @@ void VulkanEngine::init_descriptors()
 														1, VK_SHADER_STAGE_VERTEX_BIT
 														);
 
+	VkDescriptorSetLayoutBinding textureBufferBinding = vkinit::descriptor_setlayout_binding(
+														0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+														1, VK_SHADER_STAGE_FRAGMENT_BIT
+														);
+
 	VkDescriptorSetLayoutBinding bindings[] = { camBufferBinding, senceBufferBinding, objectBufferBinding};
 	VkDescriptorSetLayoutCreateInfo setInfo = vkinit::descriptor_setlayout_info(3, bindings[0]);
-	//setInfo.pBindings = bindings;
+		//setInfo.pBindings = bindings;
 	VK_CHECK(vkCreateDescriptorSetLayout(_device, &setInfo, nullptr, &_globalSetLayout));
 	
+
+	VkDescriptorSetLayoutCreateInfo set2Info = vkinit::descriptor_setlayout_info(1, textureBufferBinding);
+	VK_CHECK(vkCreateDescriptorSetLayout(_device, &set2Info, nullptr, &_singleTextureSetLayout));
+
+
+
 	_mainDeletionQueue.push_function([=]() {
 		vkDestroyDescriptorSetLayout(_device, _globalSetLayout, nullptr);
+		vkDestroyDescriptorSetLayout(_device, _singleTextureSetLayout, nullptr);
 		});
 
 	VkDescriptorPoolCreateInfo pool_info = vkinit::descriptorpool_create_info(10, sizes.data(), sizes.size() );

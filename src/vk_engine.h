@@ -51,6 +51,7 @@ struct MeshPushConstants {
 };
 
 struct Material {
+	VkDescriptorSet textureSet{ VK_NULL_HANDLE };
 	VkPipeline pipeline;
 	VkPipelineLayout pipelineLayout;
 };
@@ -161,8 +162,11 @@ public:
 	std::vector<std::string> texture_name;
 
 	VkPipelineLayout _meshPipelineLayout;  // Temp var
+	VkPipelineLayout _texturedPipeLayout;   // Temp var
+
 
 	VkDescriptorSetLayout _globalSetLayout;
+	VkDescriptorSetLayout _singleTextureSetLayout;
 	VkDescriptorPool _descriptorPool;
 	
 	UploadContext _uploadContext;
