@@ -231,4 +231,5 @@ private:
 	void upload_mesh(Mesh& mesh);
 	void key_event_process(int32_t keycode);
 	void init_descriptors();
+	void init_imgui();
 };
